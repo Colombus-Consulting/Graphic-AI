@@ -188,7 +188,7 @@ const buildPrompt = ({ userPrompt, inspirationCount }) => {
     "TASK: Recreate the source chart with a completely new visual design inspired by the style references.",
     "",
     "STEP 1 — DATA EXTRACTION: Identify and memorize every single piece of information in the source chart: all titles, subtitles, axis labels, data values, percentages, legends, footnotes, units, and annotations. Nothing may be omitted or altered.",
-    "STEP 2 — STYLE ANALYSIS: Study the visual language of the inspiration image(s): color palette, typography choices, icon style, layout structure, spacing rhythm, and overall aesthetic.",
+    "STEP 2 — STYLE ANALYSIS: Study the visual language of the inspiration image(s): color palette, typography choices, icon style, layout structure, spacing rhythm, and overall aesthetic. Do not copy any information or text from the inspiration, only visual design.",
     "STEP 3 — SYNTHESIS: Design a new chart that contains 100% of the source data, presented with the visual style extracted from the inspirations. Prioritize readability, clean alignment, and typographic hierarchy.",
     "",
     "OUTPUT: A single polished chart image on a white background."
