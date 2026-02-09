@@ -30,7 +30,7 @@ app.use(express.static("public"));
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent";
+  "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent";
 const VALID_ASPECT_RATIOS = new Set([
   "1:1",
   "2:3",
@@ -44,6 +44,20 @@ const VALID_ASPECT_RATIOS = new Set([
   "21:9"
 ]);
 const VALID_IMAGE_SIZES = new Set(["1K", "2K", "4K"]);
+const SYSTEM_INSTRUCTION = {
+  parts: [
+    {
+      text: [
+        "You are a professional infographic and data visualization redesigner.",
+        "Your absolute priority is DATA FIDELITY: every text, number, label, title, legend, axis, unit, and data point from the source image must appear in your output exactly as written, in the original language, with zero modifications.",
+        "You apply visual styles from reference images (color palettes, typography styles, iconography, layout patterns, spacing) to create a fresh, polished design.",
+        "You always produce a clean white background, clear visual hierarchy, proper alignments, and readable typography.",
+        "You never invent data, never borrow text or numbers from inspiration images, and never omit any information from the source."
+      ].join(" ")
+    }
+  ]
+};
+
 const MIME_EXTENSION_MAP = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -169,51 +183,47 @@ const signImageRows = async (rows) => {
   }));
 };
 
-const buildPrompt = ({ userPrompt, count, inspirationCount }) => {
-  const promptLines = [
-    "Tu es un expert en design et modifications de graphiques.",
-    "Ton objectif : Générer un nouveau graphique avec EXACTEMENT TOUTES LES INFORMATIONS présentes dans le graphique source, en copiant et adaptant le style du graphique inspiration.",
-    "Le graphique source contient donc toutes les informations à utiliser et retranscrire, alors que le graphique inspiration contient uniquement des élements stylistiques, des couleurs, des pictogrammes et une logique de présentation.",
-    "Contraintes: Conserver TOUTES des informations de la SOURCE (textes, chiffres, logique) et ne prendre AUCUNE information (textes, chiffres) des inspirations.",
-    "Règles visuelles : fond blanc, recopier le style du graphique inspiration.",
-    "Lisibilité prioritaire. Mise en page plus claire et logique, hiérarchie typographique, alignements propres et symétriques, couleurs claires et cohérentes, ne pas surcharger.",
-    "Retourne uniquement le nouveau graphique modifié.",
-    `Si plusieurs variantes sont demandées, génère ${count} version(s) avec des styles visuels distincts, en respectant les régles énoncées.`,
-    inspirationCount > 0
-      ? `Nombre d'images d'inspiration: ${inspirationCount}.`
-      : "Aucune inspiration fournie.",
+const buildPrompt = ({ userPrompt, inspirationCount }) => {
+  const lines = [
+    "TASK: Recreate the source chart with a completely new visual design inspired by the style references.",
+    "",
+    "STEP 1 — DATA EXTRACTION: Identify and memorize every single piece of information in the source chart: all titles, subtitles, axis labels, data values, percentages, legends, footnotes, units, and annotations. Nothing may be omitted or altered.",
+    "STEP 2 — STYLE ANALYSIS: Study the visual language of the inspiration image(s): color palette, typography choices, icon style, layout structure, spacing rhythm, and overall aesthetic.",
+    "STEP 3 — SYNTHESIS: Design a new chart that contains 100% of the source data, presented with the visual style extracted from the inspirations. Prioritize readability, clean alignment, and typographic hierarchy.",
+    "",
+    "OUTPUT: A single polished chart image on a white background."
   ];
 
-  if (userPrompt && userPrompt.trim().length > 0) {
-    promptLines.push("Instructions utilisateur:");
-    promptLines.push(userPrompt.trim());
+  if (inspirationCount === 0) {
+    lines.push("No style reference provided — improve the visual design using modern infographic best practices.");
   }
 
-  return promptLines.join("\n");
+  if (userPrompt && userPrompt.trim().length > 0) {
+    lines.push("", "ADDITIONAL USER INSTRUCTIONS:", userPrompt.trim());
+  }
+
+  return lines.join("\n");
 };
 
-const buildRefinePrompt = ({ userPrompt, count, inspirationCount }) => {
-  const promptLines = [
-    "Tu es expert en retouche d'infographies.",
-    "But: appliquer UNIQUEMENT les modifications demandées sur la SOURCE, sans re-designer.",
-    "Conserver 100% des informations, textes, chiffres, langue.",
-    "Garde le style global sauf si explicitement demandé.",
-    "Retourne uniquement l'image finale."
-
+const buildRefinePrompt = ({ userPrompt, inspirationCount }) => {
+  const lines = [
+    "TASK: Apply ONLY the requested modifications to the source image. Do not redesign it.",
+    "Preserve 100% of existing information, text, numbers, and language.",
+    "Keep the current style unless the user explicitly asks to change it.",
+    "Output only the modified image."
   ];
 
   if (userPrompt && userPrompt.trim().length > 0) {
-    promptLines.push("Modifications demandees:");
-    promptLines.push(userPrompt.trim());
+    lines.push("", "REQUESTED MODIFICATIONS:", userPrompt.trim());
   } else {
-    promptLines.push("Aucune modification specifiee: ne change rien a la SOURCE.");
+    lines.push("", "No modifications specified — reproduce the source exactly as-is.");
   }
 
   if (inspirationCount > 0) {
-    promptLines.push(`Nombre d'images d'inspiration: ${inspirationCount}.`);
+    lines.push(`Style reference images provided: ${inspirationCount}.`);
   }
 
-  return promptLines.join("\n");
+  return lines.join("\n");
 };
 
 const buildParts = ({
@@ -226,52 +236,55 @@ const buildParts = ({
   mode
 }) => {
   const promptBuilder = mode === "refine" ? buildRefinePrompt : buildPrompt;
-  const parts = [
-    {
-      text: promptBuilder({
-        userPrompt: prompt,
-        count,
-        inspirationCount: inspirations.length
-      })
-    },
-    ...(variantTotal && variantTotal > 1
-      ? [
-          {
-            text:
-              mode === "refine"
-                ? `Variante ${variantIndex}/${variantTotal}: propose une alternative TRES proche, avec de petites differences limitees aux modifications demandees.`
-                : `Variante ${variantIndex}/${variantTotal}: applique une interpretation visuelle distincte des autres variantes (palette, typographie, mise en page), sans jamais modifier les donnees.`
-          }
-        ]
-      : []),
-    {
-      text: "IMAGE PRINCIPALE (BASE A AMELIORER):"
-    },
-    {
-      inline_data: {
-        mime_type: baseImage.mimeType,
-        data: baseImage.data
-      }
-    }
-  ];
+  const parts = [];
 
+  // 1. Source image FIRST (context before instructions)
+  parts.push({
+    text: "SOURCE CHART — Extract ALL data, text, numbers, labels, and structure from this image:"
+  });
+  parts.push({
+    inline_data: {
+      mime_type: baseImage.mimeType,
+      data: baseImage.data
+    },
+    media_resolution: { level: "MEDIA_RESOLUTION_HIGH" }
+  });
+
+  // 2. Inspiration images (style only)
   if (inspirations.length > 0) {
     parts.push({
-      text: "IMAGES D'INSPIRATION (STYLE UNIQUEMENT):"
+      text: "STYLE REFERENCES — Extract ONLY visual style (colors, typography, icons, layout) from these images. Ignore their data content:"
+    });
+    inspirations.forEach((image, index) => {
+      parts.push({
+        text: `Style reference ${index + 1}:`
+      });
+      parts.push({
+        inline_data: {
+          mime_type: image.mimeType,
+          data: image.data
+        },
+        media_resolution: { level: "MEDIA_RESOLUTION_MEDIUM" }
+      });
     });
   }
 
-  inspirations.forEach((image, index) => {
-    parts.push({
-      text: `Inspiration ${index + 1}:`
-    });
-    parts.push({
-      inline_data: {
-        mime_type: image.mimeType,
-        data: image.data
-      }
-    });
+  // 3. Instructions AFTER context (per Gemini 3 best practice)
+  parts.push({
+    text: promptBuilder({
+      userPrompt: prompt,
+      inspirationCount: inspirations.length
+    })
   });
+
+  // 4. Variant differentiation (only when multiple variants requested)
+  if (variantTotal && variantTotal > 1) {
+    parts.push({
+      text: mode === "refine"
+        ? `This is variant ${variantIndex} of ${variantTotal}. Make small visual differences compared to other variants while keeping the same modifications.`
+        : `This is variant ${variantIndex} of ${variantTotal}. Use a distinctly different visual interpretation: different color palette, different typography weight, different layout arrangement. The data must remain identical across all variants.`
+    });
+  }
 
   return parts;
 };
@@ -327,7 +340,8 @@ const normalizeImageConfig = (config) => {
 
 const buildGenerationConfig = (imageConfig) => {
   const generationConfig = {
-    responseModalities: ["TEXT", "IMAGE"]
+    responseModalities: ["TEXT", "IMAGE"],
+    temperature: 1.0
   };
 
   if (imageConfig) {
@@ -352,6 +366,7 @@ const isImageConfigError = (error) => {
 
 const callGeminiRaw = async ({ parts, generationConfig }) => {
   const body = {
+    system_instruction: SYSTEM_INSTRUCTION,
     contents: [
       {
         parts
