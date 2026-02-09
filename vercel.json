@@ -1,14 +1,16 @@
 {
   "version": 2,
   "framework": null,
+  "functions": {
+    "server.js": {
+      "maxDuration": 60,
+      "includeFiles": "public/**"
+    }
+  },
   "builds": [
     {
       "src": "server.js",
-      "use": "@vercel/node",
-      "config": {
-        "maxDuration": 60,
-        "includeFiles": "public/**"
-      }
+      "use": "@vercel/node"
     }
   ],
   "routes": [

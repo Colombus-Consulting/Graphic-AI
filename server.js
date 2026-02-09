@@ -384,7 +384,8 @@ const callGeminiRaw = async ({ parts, generationConfig }) => {
     return data;
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw { message: "Timeout: la generation a depasse 120 secondes.", status: 504 };
+      const secs = Math.round(timeoutMs / 1000);
+      throw { message: `Timeout: la generation a depasse ${secs} secondes.`, status: 504 };
     }
     throw { message: error?.message || "Erreur reseau.", status: 502 };
   } finally {
