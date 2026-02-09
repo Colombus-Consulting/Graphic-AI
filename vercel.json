@@ -6,22 +6,15 @@
       "src": "server.js",
       "use": "@vercel/node",
       "config": {
-        "maxDuration": 60
+        "maxDuration": 60,
+        "includeFiles": "public/**"
       }
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "server.js"
-    },
-    {
-      "src": "/(.*\\.(html|css|js|png|jpg|jpeg|svg|ico|webp|woff2?))",
-      "dest": "public/$1"
-    },
-    {
       "src": "/(.*)",
-      "dest": "public/index.html"
+      "dest": "server.js"
     }
   ]
 }
