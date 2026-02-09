@@ -5,7 +5,9 @@ const inspoZone = document.querySelector("[data-zone='inspo']");
 const basePreview = document.querySelector("#basePreview");
 const inspoPreview = document.querySelector("#inspoPreview");
 const promptField = document.querySelector("#prompt");
-const countInputs = Array.from(document.querySelectorAll("input[name='count']"));
+const countInputs = Array.from(
+  document.querySelectorAll("input[name='count']"),
+);
 const generateBtn = document.querySelector("#generate");
 const statusLine = document.querySelector("#status");
 const resultsGrid = document.querySelector("#resultsGrid");
@@ -46,6 +48,16 @@ const adminRole = document.querySelector("#adminRole");
 const adminStatus = document.querySelector("#adminStatus");
 const adminUsers = document.querySelector("#adminUsers");
 const adminNavBtn = document.querySelector("#adminNavBtn");
+const usagePanel = document.querySelector("#usagePanel");
+const usagePeriod = document.querySelector("#usagePeriod");
+const usageRefresh = document.querySelector("#usageRefresh");
+const usageTotalCost = document.querySelector("#usageTotalCost");
+const usageTotalCalls = document.querySelector("#usageTotalCalls");
+const usageTotalImages = document.querySelector("#usageTotalImages");
+const usageSuccessRate = document.querySelector("#usageSuccessRate");
+const usagePerUser = document.querySelector("#usagePerUser");
+const usageDaily = document.querySelector("#usageDaily");
+const monthlyCostEl = document.querySelector("#monthlyCost");
 const viewButtons = Array.from(document.querySelectorAll("[data-view-target]"));
 const appViews = Array.from(document.querySelectorAll(".app-view"));
 const deleteProjectModal = document.querySelector("#deleteProjectModal");
@@ -75,6 +87,7 @@ let activeView = "workspace";
 let projectToDelete = null;
 let currentProjectId = null;
 let autoSaveTimeout = null;
+let currentMonthlyCostEur = 0;
 const AUTO_SAVE_DELAY = 2000;
 
 const fileToDataUrl = (file) =>
@@ -88,8 +101,10 @@ const fileToDataUrl = (file) =>
 const loadImageDimensions = (dataUrl) =>
   new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    img.onerror = () => reject(new Error("Impossible de lire les dimensions de l'image."));
+    img.onload = () =>
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () =>
+      reject(new Error("Impossible de lire les dimensions de l'image."));
     img.src = dataUrl;
   });
 
@@ -103,7 +118,7 @@ const aspectRatioOptions = [
   { label: "5:4", value: 5 / 4 },
   { label: "9:16", value: 9 / 16 },
   { label: "16:9", value: 16 / 9 },
-  { label: "21:9", value: 21 / 9 }
+  { label: "21:9", value: 21 / 9 },
 ];
 
 const pickAspectRatio = (width, height) => {
@@ -141,7 +156,7 @@ const authorizedFetch = async (url, options = {}) => {
   }
   const headers = {
     ...(options.headers || {}),
-    Authorization: `Bearer ${token}`
+    Authorization: `Bearer ${token}`,
   };
   return fetch(url, { ...options, headers });
 };
@@ -156,7 +171,10 @@ const initSupabase = async () => {
   if (!window.supabase || !window.supabase.createClient) {
     throw new Error("SDK Supabase non chargé.");
   }
-  supabaseClient = window.supabase.createClient(data.supabaseUrl, data.supabaseAnonKey);
+  supabaseClient = window.supabase.createClient(
+    data.supabaseUrl,
+    data.supabaseAnonKey,
+  );
   return supabaseClient;
 };
 
@@ -274,7 +292,10 @@ const handleBaseFiles = async (files) => {
     const dimensions = await loadImageDimensions(dataUrl);
     aspectRatio = pickAspectRatio(dimensions.width, dimensions.height);
   } catch (error) {
-    setStatus("Impossible de déterminer le ratio du graphique. Utilisation du ratio automatique.", "warn");
+    setStatus(
+      "Impossible de déterminer le ratio du graphique. Utilisation du ratio automatique.",
+      "warn",
+    );
   }
 
   baseImage = {
@@ -282,7 +303,7 @@ const handleBaseFiles = async (files) => {
     mimeType: file.type || "image/png",
     dataUrl,
     data: dataUrl.split(",")[1],
-    aspectRatio
+    aspectRatio,
   };
   renderBasePreview();
 
@@ -311,7 +332,7 @@ const handleInspirationFiles = async (files) => {
       mimeType: file.type || "image/png",
       dataUrl,
       data: dataUrl.split(",")[1],
-      position
+      position,
     };
 
     // Upload to project if one is selected
@@ -357,7 +378,7 @@ const deleteImageAPI = async (imageId) => {
   if (!currentSession || !imageId) return false;
   try {
     const response = await authorizedFetch(`/api/images/${imageId}`, {
-      method: "DELETE"
+      method: "DELETE",
     });
     return response.ok;
   } catch (error) {
@@ -402,7 +423,7 @@ const changePassword = async (newPassword) => {
   if (!supabaseClient || !currentSession) return { error: "Non connecté" };
 
   const { error } = await supabaseClient.auth.updateUser({
-    password: newPassword
+    password: newPassword,
   });
 
   if (error) {
@@ -441,17 +462,18 @@ const downloadHighQuality = async (image) => {
         projectId: currentProjectId,
         baseImage: {
           data: imageData.data,
-          mimeType: imageData.mimeType || "image/png"
+          mimeType: imageData.mimeType || "image/png",
         },
         inspirationImages: [],
-        prompt: "Reproduis cette image exactement à l'identique, sans aucune modification. Qualité maximale pour impression.",
+        prompt:
+          "Reproduis cette image exactement à l'identique, sans aucune modification. Qualité maximale pour impression.",
         numImages: 1,
         imageConfig: {
           imageSize: "4K",
-          aspectRatio: imageData.aspectRatio || undefined
+          aspectRatio: imageData.aspectRatio || undefined,
         },
-        mode: "refine"
-      })
+        mode: "refine",
+      }),
     });
 
     const data = await response.json();
@@ -460,6 +482,10 @@ const downloadHighQuality = async (image) => {
     if (!response.ok || !data.images || data.images.length === 0) {
       setStatus("Erreur lors de la génération haute qualité.", "error");
       return;
+    }
+
+    if (data.estimatedCostEur) {
+      updateMonthlyCostDisplay(currentMonthlyCostEur + data.estimatedCostEur);
     }
 
     // Download the generated image
@@ -546,7 +572,9 @@ const renderResults = (images) => {
 };
 
 const appendResults = (images) => {
-  const current = resultsGrid.querySelectorAll(".result-card:not(.loading)").length;
+  const current = resultsGrid.querySelectorAll(
+    ".result-card:not(.loading)",
+  ).length;
   images.forEach((image, index) => {
     resultsGrid.appendChild(createResultCard(image, current + index));
   });
@@ -562,9 +590,9 @@ const updateAdminUser = async (userId, payload) => {
   const response = await authorizedFetch(`/api/admin/users/${userId}`, {
     method: "PATCH",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
   const data = await response.json();
   if (!response.ok) {
@@ -655,6 +683,79 @@ const loadAdminUsers = async () => {
   }
 };
 
+const loadUsageStats = async () => {
+  if (!currentProfile || currentProfile.role !== "admin") return;
+  const period = usagePeriod?.value || "month";
+  try {
+    const response = await authorizedFetch(`/api/admin/usage?period=${period}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error || "Erreur chargement.");
+
+    if (usageTotalCost)
+      usageTotalCost.textContent = `$${data.totalCost.toFixed(4)}`;
+    if (usageTotalCalls) usageTotalCalls.textContent = data.totalCalls;
+    if (usageTotalImages)
+      usageTotalImages.textContent = data.totalOutputImages || 0;
+    if (usageSuccessRate) {
+      const rate =
+        data.totalCalls > 0
+          ? Math.round((data.successfulCalls / data.totalCalls) * 100)
+          : 0;
+      usageSuccessRate.textContent = `${rate}%`;
+    }
+
+    if (usagePerUser) {
+      usagePerUser.innerHTML = "";
+      (data.perUser || []).forEach((user) => {
+        const row = document.createElement("div");
+        row.className = "admin-user-row usage-user-row";
+        row.innerHTML = `
+          <span>${user.email}</span>
+          <span>${user.calls}</span>
+          <span>$${user.cost.toFixed(4)}</span>
+        `;
+        usagePerUser.appendChild(row);
+      });
+    }
+
+    if (usageDaily) {
+      usageDaily.innerHTML = "";
+      (data.daily || []).forEach((day) => {
+        const row = document.createElement("div");
+        row.className = "admin-user-row usage-daily-row";
+        row.innerHTML = `
+          <span>${day.date}</span>
+          <span>${day.calls}</span>
+          <span>$${day.cost.toFixed(4)}</span>
+        `;
+        usageDaily.appendChild(row);
+      });
+    }
+  } catch (error) {
+    console.error("Usage stats error:", error);
+  }
+};
+
+const updateMonthlyCostDisplay = (eur) => {
+  currentMonthlyCostEur = eur;
+  if (monthlyCostEl) {
+    monthlyCostEl.textContent = `${eur.toFixed(2).replace(".", ",")} \u20AC`;
+  }
+};
+
+const loadMonthlyCost = async () => {
+  if (!currentSession) return;
+  try {
+    const response = await authorizedFetch("/api/usage/monthly");
+    const data = await response.json();
+    if (response.ok) {
+      updateMonthlyCostDisplay(data.totalEur || 0);
+    }
+  } catch (error) {
+    console.error("Monthly cost error:", error);
+  }
+};
+
 // ============================================
 // PROJECT MANAGEMENT
 // ============================================
@@ -673,7 +774,7 @@ const fetchImageAsBase64 = async (url, mimeType) => {
         resolve({
           dataUrl,
           data: dataUrl.split(",")[1],
-          mimeType: mimeType || blob.type || "image/png"
+          mimeType: mimeType || blob.type || "image/png",
         });
       };
       reader.onerror = () => resolve(null);
@@ -730,11 +831,17 @@ const loadProject = async (projectId) => {
 
     // Restore base image
     if (data.project.baseImageUrl) {
-      const imageData = await fetchImageAsBase64(data.project.baseImageUrl, data.project.baseMimeType);
+      const imageData = await fetchImageAsBase64(
+        data.project.baseImageUrl,
+        data.project.baseMimeType,
+      );
       if (imageData) {
         try {
           const dimensions = await loadImageDimensions(imageData.dataUrl);
-          imageData.aspectRatio = pickAspectRatio(dimensions.width, dimensions.height);
+          imageData.aspectRatio = pickAspectRatio(
+            dimensions.width,
+            dimensions.height,
+          );
         } catch (e) {
           imageData.aspectRatio = null;
         }
@@ -756,7 +863,7 @@ const loadProject = async (projectId) => {
             inspirationImages.push({
               id: insp.id,
               position: insp.position,
-              ...imageData
+              ...imageData,
             });
           }
         }
@@ -781,7 +888,10 @@ const loadProject = async (projectId) => {
     if (projectList) {
       const items = projectList.querySelectorAll(".project-item");
       items.forEach((item) => {
-        item.classList.toggle("is-active", item.dataset.projectId === projectId);
+        item.classList.toggle(
+          "is-active",
+          item.dataset.projectId === projectId,
+        );
       });
     }
 
@@ -796,13 +906,13 @@ const saveCurrentProject = async () => {
   if (!currentProjectId || !currentSession) return;
   try {
     const updates = {
-      prompt: promptField.value
+      prompt: promptField.value,
     };
 
     await authorizedFetch(`/api/projects/${currentProjectId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates)
+      body: JSON.stringify(updates),
     });
   } catch (error) {
     console.error("Auto-save failed:", error);
@@ -822,7 +932,7 @@ const createNewProjectAPI = async () => {
     const response = await authorizedFetch("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Nouveau projet" })
+      body: JSON.stringify({ name: "Nouveau projet" }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -845,9 +955,9 @@ const uploadBaseImageToProject = async () => {
       body: JSON.stringify({
         baseImage: {
           data: baseImage.data,
-          mimeType: baseImage.mimeType
-        }
-      })
+          mimeType: baseImage.mimeType,
+        },
+      }),
     });
   } catch (error) {
     console.error("Failed to upload base image:", error);
@@ -858,17 +968,20 @@ const uploadBaseImageToProject = async () => {
 const uploadInspirationToProject = async (imageData, position) => {
   if (!currentProjectId || !currentSession) return null;
   try {
-    const response = await authorizedFetch(`/api/projects/${currentProjectId}/inspirations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        image: {
-          data: imageData.data,
-          mimeType: imageData.mimeType
-        },
-        position
-      })
-    });
+    const response = await authorizedFetch(
+      `/api/projects/${currentProjectId}/inspirations`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: {
+            data: imageData.data,
+            mimeType: imageData.mimeType,
+          },
+          position,
+        }),
+      },
+    );
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data?.error || "Impossible d'ajouter l'inspiration.");
@@ -884,9 +997,12 @@ const uploadInspirationToProject = async (imageData, position) => {
 const deleteInspirationFromProject = async (inspirationId) => {
   if (!currentProjectId || !currentSession || !inspirationId) return;
   try {
-    await authorizedFetch(`/api/projects/${currentProjectId}/inspirations/${inspirationId}`, {
-      method: "DELETE"
-    });
+    await authorizedFetch(
+      `/api/projects/${currentProjectId}/inspirations/${inspirationId}`,
+      {
+        method: "DELETE",
+      },
+    );
   } catch (error) {
     console.error("Failed to delete inspiration:", error);
   }
@@ -897,7 +1013,7 @@ const deleteProjectAPI = async (projectId) => {
   if (!currentSession || !projectId) return false;
   try {
     const response = await authorizedFetch(`/api/projects/${projectId}`, {
-      method: "DELETE"
+      method: "DELETE",
     });
     if (!response.ok) {
       const data = await response.json();
@@ -917,7 +1033,7 @@ const renameProjectAPI = async (projectId, newName) => {
     const response = await authorizedFetch(`/api/projects/${projectId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName })
+      body: JSON.stringify({ name: newName }),
     });
     return response.ok;
   } catch (error) {
@@ -953,6 +1069,10 @@ const setActiveView = (view) => {
   if (nextView === "gallery" && galleryImages.length === 0) {
     loadGallery({ reset: true });
   }
+  if (nextView === "admin") {
+    loadAdminUsers();
+    loadUsageStats();
+  }
 };
 
 // Gallery functions
@@ -964,7 +1084,7 @@ const formatDate = (dateString) => {
     month: "short",
     year: "numeric",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 };
 
@@ -1072,9 +1192,10 @@ const renderGallery = () => {
   // Filter by search term
   if (gallerySearchTerm) {
     const term = gallerySearchTerm.toLowerCase();
-    filteredImages = filteredImages.filter((img) =>
-      (img.prompt && img.prompt.toLowerCase().includes(term)) ||
-      (img.mode && img.mode.toLowerCase().includes(term))
+    filteredImages = filteredImages.filter(
+      (img) =>
+        (img.prompt && img.prompt.toLowerCase().includes(term)) ||
+        (img.mode && img.mode.toLowerCase().includes(term)),
     );
   }
 
@@ -1188,7 +1309,7 @@ const hydrateImageData = async (image) => {
     return {
       ...image,
       data: data.data,
-      mimeType: data.mimeType || "image/png"
+      mimeType: data.mimeType || "image/png",
     };
   } catch (error) {
     setStatus(error.message || "Impossible de charger l'image.", "error");
@@ -1208,9 +1329,15 @@ const openRefineModal = async (image) => {
   if (!selectedResult.aspectRatio) {
     try {
       const dimensions = await loadImageDimensions(refineImage.src);
-      selectedResult.aspectRatio = pickAspectRatio(dimensions.width, dimensions.height);
+      selectedResult.aspectRatio = pickAspectRatio(
+        dimensions.width,
+        dimensions.height,
+      );
     } catch (error) {
-      setStatus("Impossible de déterminer le ratio de l'image sélectionnée.", "warn");
+      setStatus(
+        "Impossible de déterminer le ratio de l'image sélectionnée.",
+        "warn",
+      );
     }
   }
 
@@ -1260,7 +1387,7 @@ const generateImages = async () => {
 
   const selectedCount = Number.parseInt(
     countInputs.find((input) => input.checked)?.value || "2",
-    10
+    10,
   );
 
   setStatus("Génération en cours...", "");
@@ -1272,26 +1399,26 @@ const generateImages = async () => {
     const response = await authorizedFetch("/api/generate", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         projectId: currentProjectId,
         baseImage: {
           data: baseImage.data,
-          mimeType: baseImage.mimeType
+          mimeType: baseImage.mimeType,
         },
         inspirationImages: inspirationImages.map((image) => ({
           data: image.data,
-          mimeType: image.mimeType
+          mimeType: image.mimeType,
         })),
         prompt: promptField.value,
         numImages: selectedCount,
         imageConfig: {
           imageSize: "1K",
-          aspectRatio: baseImage?.aspectRatio || undefined
+          aspectRatio: baseImage?.aspectRatio || undefined,
         },
-        mode: "base"
-      })
+        mode: "base",
+      }),
     });
 
     const data = await response.json();
@@ -1310,7 +1437,11 @@ const generateImages = async () => {
       if (Array.isArray(data?.details)) {
         data.details.forEach((detail) => details.push(detail));
       }
-      setStatus(data?.error || "Erreur lors de la génération.", "error", details);
+      setStatus(
+        data?.error || "Erreur lors de la génération.",
+        "error",
+        details,
+      );
       clearLoading(loadingCards);
       resultsGrid.innerHTML = "";
       return;
@@ -1325,6 +1456,9 @@ const generateImages = async () => {
 
     clearLoading(loadingCards);
     renderResults(data.images);
+    if (data.estimatedCostEur) {
+      updateMonthlyCostDisplay(currentMonthlyCostEur + data.estimatedCostEur);
+    }
     const message = `Génération terminée avec ${data.images.length} image(s).`;
     const warnings = Array.isArray(data?.warnings) ? [...data.warnings] : [];
     if (Array.isArray(data?.storageErrors)) {
@@ -1344,7 +1478,9 @@ const generateImages = async () => {
   } catch (error) {
     clearLoading(loadingCards);
     resultsGrid.innerHTML = "";
-    setStatus("Erreur réseau pendant la génération.", "error", [error?.message || "Réseau indisponible."]);
+    setStatus("Erreur réseau pendant la génération.", "error", [
+      error?.message || "Réseau indisponible.",
+    ]);
   } finally {
     generateBtn.disabled = false;
     generateBtn.textContent = "Générer";
@@ -1370,23 +1506,23 @@ const generateRefine = async () => {
     const response = await authorizedFetch("/api/generate", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         projectId: currentProjectId,
         baseImage: {
           data: selectedResult.data,
-          mimeType: selectedResult.mimeType
+          mimeType: selectedResult.mimeType,
         },
         inspirationImages: [],
         prompt,
         numImages: 1,
         imageConfig: {
           imageSize: "1K",
-          aspectRatio: selectedResult.aspectRatio || undefined
+          aspectRatio: selectedResult.aspectRatio || undefined,
         },
-        mode: "refine"
-      })
+        mode: "refine",
+      }),
     });
 
     const data = await response.json();
@@ -1405,7 +1541,11 @@ const generateRefine = async () => {
       if (Array.isArray(data?.details)) {
         data.details.forEach((detail) => details.push(detail));
       }
-      setStatus(data?.error || "Erreur lors de la modification.", "error", details);
+      setStatus(
+        data?.error || "Erreur lors de la modification.",
+        "error",
+        details,
+      );
       clearLoading(loadingCards);
       return;
     }
@@ -1418,6 +1558,9 @@ const generateRefine = async () => {
 
     clearLoading(loadingCards);
     appendResults(data.images);
+    if (data.estimatedCostEur) {
+      updateMonthlyCostDisplay(currentMonthlyCostEur + data.estimatedCostEur);
+    }
     const message = "Modification terminée.";
     const warnings = Array.isArray(data?.warnings) ? [...data.warnings] : [];
     if (Array.isArray(data?.storageErrors)) {
@@ -1436,7 +1579,9 @@ const generateRefine = async () => {
     setStatus(message, type, warnings);
   } catch (error) {
     clearLoading(loadingCards);
-    setStatus("Erreur réseau pendant la modification.", "error", [error?.message || "Réseau indisponible."]);
+    setStatus("Erreur réseau pendant la modification.", "error", [
+      error?.message || "Réseau indisponible.",
+    ]);
   } finally {
     generateBtn.disabled = false;
     refineGenerate.disabled = false;
@@ -1560,7 +1705,8 @@ const createProjectItem = (id, name, isActive = false) => {
 const openDeleteModal = (projectItem) => {
   if (!deleteProjectModal) return;
   projectToDelete = projectItem;
-  const projectName = projectItem.querySelector(".project-name")?.textContent || "Ce projet";
+  const projectName =
+    projectItem.querySelector(".project-name")?.textContent || "Ce projet";
   if (deleteProjectNameEl) {
     deleteProjectNameEl.textContent = projectName;
   }
@@ -1735,7 +1881,7 @@ if (loginForm) {
       await initSupabase();
       const { error } = await supabaseClient.auth.signInWithPassword({
         email: loginEmail.value.trim(),
-        password: loginPassword.value
+        password: loginPassword.value,
       });
       if (error) {
         setAuthStatus(error.message || "Connexion impossible.", "error");
@@ -1766,7 +1912,9 @@ if (cancelPasswordBtn) {
 }
 
 if (passwordModal) {
-  passwordModal.querySelector(".modal-backdrop")?.addEventListener("click", closePasswordModal);
+  passwordModal
+    .querySelector(".modal-backdrop")
+    ?.addEventListener("click", closePasswordModal);
 }
 
 if (passwordForm) {
@@ -1778,7 +1926,8 @@ if (passwordForm) {
 
     // Validation
     if (newPass.length < 6) {
-      passwordError.textContent = "Le mot de passe doit contenir au moins 6 caractères.";
+      passwordError.textContent =
+        "Le mot de passe doit contenir au moins 6 caractères.";
       passwordError.hidden = false;
       return;
     }
@@ -1826,14 +1975,14 @@ if (adminCreateForm) {
       const payload = {
         email: adminEmail.value.trim(),
         password: adminPassword.value,
-        role: adminRole.value
+        role: adminRole.value,
       };
       const response = await authorizedFetch("/api/admin/users", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -1848,6 +1997,13 @@ if (adminCreateForm) {
       setAdminStatus(error.message || "Erreur de création.", "error");
     }
   });
+}
+
+if (usagePeriod) {
+  usagePeriod.addEventListener("change", loadUsageStats);
+}
+if (usageRefresh) {
+  usageRefresh.addEventListener("click", loadUsageStats);
 }
 
 const handleSession = async (session) => {
@@ -1882,12 +2038,17 @@ const handleSession = async (session) => {
   if (adminPanel) {
     adminPanel.hidden = currentProfile.role !== "admin";
   }
+  if (usagePanel) {
+    usagePanel.hidden = currentProfile.role !== "admin";
+  }
   if (adminNavBtn) {
     adminNavBtn.hidden = currentProfile.role !== "admin";
   }
   setActiveView(activeView);
   await loadProjects();
   await loadAdminUsers();
+  await loadUsageStats();
+  await loadMonthlyCost();
 };
 
 const bootstrap = async () => {

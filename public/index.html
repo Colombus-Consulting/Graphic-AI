@@ -1,404 +1,864 @@
 ﻿<!doctype html>
 <html lang="fr">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Graphic AI - Production Workspace</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div id="authView" class="auth-view">
-      <div class="card auth-card">
-        <div class="auth-header">
-          <span class="badge">Accès sécurisé</span>
-          <h1>Connexion</h1>
-          <p class="subtitle">Identifie-toi pour accéder à l'espace de production.</p>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Graphic AI - Production Workspace</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="styles.css" />
+    </head>
+    <body>
+        <div id="authView" class="auth-view">
+            <div class="card auth-card">
+                <div class="auth-header">
+                    <span class="badge">Accès sécurisé</span>
+                    <h1>Connexion</h1>
+                    <p class="subtitle">
+                        Identifie-toi pour accéder à l'espace de production.
+                    </p>
+                </div>
+                <form id="loginForm" class="auth-form">
+                    <label class="field-label" for="loginEmail">Email</label>
+                    <input
+                        id="loginEmail"
+                        type="email"
+                        placeholder="prenom.nom@entreprise.com"
+                        required
+                    />
+                    <label class="field-label" for="loginPassword"
+                        >Mot de passe</label
+                    >
+                    <input
+                        id="loginPassword"
+                        type="password"
+                        placeholder="Mot de passe"
+                        required
+                    />
+                    <button
+                        id="loginBtn"
+                        class="btn btn-primary btn-lg"
+                        type="submit"
+                    >
+                        Se connecter
+                    </button>
+                    <p id="loginStatus" class="auth-status"></p>
+                </form>
+            </div>
         </div>
-        <form id="loginForm" class="auth-form">
-          <label class="field-label" for="loginEmail">Email</label>
-          <input id="loginEmail" type="email" placeholder="prenom.nom@entreprise.com" required />
-          <label class="field-label" for="loginPassword">Mot de passe</label>
-          <input id="loginPassword" type="password" placeholder="Mot de passe" required />
-          <button id="loginBtn" class="btn btn-primary btn-lg" type="submit">Se connecter</button>
-          <p id="loginStatus" class="auth-status"></p>
-        </form>
-      </div>
-    </div>
 
-    <div id="appView" class="app-layout" hidden>
-      <aside class="nav-rail" aria-label="Navigation">
-        <button
-          id="navToggle"
-          class="nav-toggle"
-          type="button"
-          aria-expanded="false"
-          aria-controls="navDrawer"
-          aria-label="Ouvrir le menu"
-        >
-          <svg class="nav-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
-            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
-            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
-            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
-          </svg>
-        </button>
-        <div id="navDrawer" class="nav-drawer" aria-hidden="true">
-          <!-- Admin button at top (hidden for non-admins) -->
-          <button id="adminNavBtn" class="nav-admin-btn" type="button" data-view-target="admin" hidden>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            <span>Administration</span>
-          </button>
+        <div id="appView" class="app-layout" hidden>
+            <aside class="nav-rail" aria-label="Navigation">
+                <button
+                    id="navToggle"
+                    class="nav-toggle"
+                    type="button"
+                    aria-expanded="false"
+                    aria-controls="navDrawer"
+                    aria-label="Ouvrir le menu"
+                >
+                    <svg
+                        class="nav-toggle-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                    </svg>
+                </button>
+                <div id="navDrawer" class="nav-drawer" aria-hidden="true">
+                    <!-- Admin button at top (hidden for non-admins) -->
+                    <button
+                        id="adminNavBtn"
+                        class="nav-admin-btn"
+                        type="button"
+                        data-view-target="admin"
+                        hidden
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <circle cx="12" cy="12" r="3" />
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                            />
+                        </svg>
+                        <span>Administration</span>
+                    </button>
 
-          <!-- Gallery button -->
-          <button class="nav-gallery-btn" type="button" data-view-target="gallery">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="7" height="7" rx="1"/>
-              <rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/>
-              <rect x="14" y="14" width="7" height="7" rx="1"/>
-            </svg>
-            <span>Galerie</span>
-          </button>
+                    <!-- Gallery button -->
+                    <button
+                        class="nav-gallery-btn"
+                        type="button"
+                        data-view-target="gallery"
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <rect x="3" y="3" width="7" height="7" rx="1" />
+                            <rect x="14" y="3" width="7" height="7" rx="1" />
+                            <rect x="3" y="14" width="7" height="7" rx="1" />
+                            <rect x="14" y="14" width="7" height="7" rx="1" />
+                        </svg>
+                        <span>Galerie</span>
+                    </button>
 
-          <div class="nav-divider"></div>
+                    <div class="nav-divider"></div>
 
-          <!-- Projects section -->
-          <div class="nav-projects-section">
-            <div class="nav-projects-header">
-              <h4>Projets</h4>
-              <button id="newProjectBtn" class="btn-icon" type="button" title="Nouveau projet">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-              </button>
-            </div>
-            <div id="projectList" class="project-list" role="list">
-              <!-- Projets chargés dynamiquement -->
-            </div>
-          </div>
+                    <!-- Projects section -->
+                    <div class="nav-projects-section">
+                        <div class="nav-projects-header">
+                            <h4>Projets</h4>
+                            <button
+                                id="newProjectBtn"
+                                class="btn-icon"
+                                type="button"
+                                title="Nouveau projet"
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="projectList" class="project-list" role="list">
+                            <!-- Projets chargés dynamiquement -->
+                        </div>
+                    </div>
 
-          <!-- User section at bottom -->
-          <div class="nav-user-section">
-            <div class="nav-user-info">
-              <p id="userEmail">—</p>
-              <span id="userRole" class="badge">member</span>
-            </div>
-            <button id="changePasswordBtn" class="btn btn-ghost btn-sm" type="button">Changer le mot de passe</button>
-            <button id="logoutBtn" class="btn btn-outline btn-sm" type="button">Déconnexion</button>
-          </div>
+                    <!-- User section at bottom -->
+                    <div class="nav-user-section">
+                        <div class="nav-user-info">
+                            <p id="userEmail">—</p>
+                            <span id="userRole" class="badge">member</span>
+                        </div>
+                        <button
+                            id="changePasswordBtn"
+                            class="btn btn-ghost btn-sm"
+                            type="button"
+                        >
+                            Changer le mot de passe
+                        </button>
+                        <button
+                            id="logoutBtn"
+                            class="btn btn-outline btn-sm"
+                            type="button"
+                        >
+                            Déconnexion
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="app-shell">
+                <div class="app-views">
+                    <section class="app-view is-active" data-view="workspace">
+                        <section class="hero card hero-wide">
+                            <div class="hero-copy">
+                                <h1>
+                                    Des variantes graphiques alignées avec votre
+                                    charte, en quelques minutes.
+                                </h1>
+                                <p class="subtitle">
+                                    Importez un graphique, ajoutez des
+                                    inspirations et orientez l'IA pour produire
+                                    des variantes professionnelles prêtes à
+                                    livrer.
+                                </p>
+                                <div
+                                    class="hero-metrics"
+                                    aria-label="Informations clés"
+                                >
+                                    <div class="metric">
+                                        <span class="metric-value">~1 min</span>
+                                        <span class="metric-label"
+                                            >Temps moyen</span
+                                        >
+                                    </div>
+                                    <span
+                                        class="metric-divider"
+                                        aria-hidden="true"
+                                    ></span>
+                                    <div class="metric">
+                                        <span class="metric-value"
+                                            >~0,15 €</span
+                                        >
+                                        <span class="metric-label"
+                                            >Cout moyen / image</span
+                                        >
+                                    </div>
+                                    <span
+                                        class="metric-divider"
+                                        aria-hidden="true"
+                                    ></span>
+                                    <div class="metric">
+                                        <span
+                                            id="monthlyCost"
+                                            class="metric-value"
+                                            >--</span
+                                        >
+                                        <span class="metric-label"
+                                            >Ce mois-ci</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="inputs-row">
+                            <article class="card">
+                                <div class="card-header">
+                                    <h2>Graphique source</h2>
+                                    <p>Importe le visuel à améliorer.</p>
+                                </div>
+                                <div class="dropzone" data-zone="base">
+                                    <input
+                                        id="baseInput"
+                                        type="file"
+                                        accept="image/*"
+                                        hidden
+                                    />
+                                    <div class="dropzone-content">
+                                        <p>Glissez-déposez votre graphique</p>
+                                        <span>ou cliquez pour importer</span>
+                                    </div>
+                                    <div
+                                        id="basePreview"
+                                        class="preview-single"
+                                    ></div>
+                                </div>
+                            </article>
+
+                            <article class="card">
+                                <div class="card-header">
+                                    <h2>Inspirations</h2>
+                                    <p>Jusqu'à 4 références de style.</p>
+                                </div>
+                                <div class="dropzone" data-zone="inspo">
+                                    <input
+                                        id="inspoInput"
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        hidden
+                                    />
+                                    <div class="dropzone-content">
+                                        <p>Ajoutez des références visuelles</p>
+                                        <span
+                                            >styles, palettes, layouts,
+                                            typographies</span
+                                        >
+                                    </div>
+                                    <div
+                                        id="inspoPreview"
+                                        class="preview-grid"
+                                    ></div>
+                                </div>
+                            </article>
+
+                            <article class="card">
+                                <div class="card-header">
+                                    <h2>Prompt</h2>
+                                    <p>
+                                        Décris le style, la hiérarchie, les
+                                        couleurs.
+                                    </p>
+                                </div>
+                                <textarea
+                                    id="prompt"
+                                    class="prompt-area"
+                                    placeholder="Ex: style minimal, palette bleu nuit, forte hiérarchie typographique..."
+                                    rows="6"
+                                ></textarea>
+                            </article>
+                        </section>
+
+                        <section class="generate-row">
+                            <button
+                                id="generate"
+                                class="btn btn-primary btn-lg"
+                            >
+                                Générer
+                            </button>
+                            <div class="generate-controls">
+                                <p class="field-label">Nombre d'images</p>
+                                <div
+                                    class="count-picker"
+                                    role="radiogroup"
+                                    aria-label="Nombre d'images"
+                                >
+                                    <label class="count-option">
+                                        <input
+                                            type="radio"
+                                            name="count"
+                                            value="1"
+                                        />
+                                        <span>1</span>
+                                    </label>
+                                    <label class="count-option">
+                                        <input
+                                            type="radio"
+                                            name="count"
+                                            value="2"
+                                            checked
+                                        />
+                                        <span>2</span>
+                                    </label>
+                                    <label class="count-option">
+                                        <input
+                                            type="radio"
+                                            name="count"
+                                            value="3"
+                                        />
+                                        <span>3</span>
+                                    </label>
+                                    <label class="count-option">
+                                        <input
+                                            type="radio"
+                                            name="count"
+                                            value="4"
+                                        />
+                                        <span>4</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="card results-card">
+                            <div class="results-header">
+                                <div>
+                                    <h2>Résultats</h2>
+                                    <p class="muted">
+                                        Générations de la session en cours.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="status">
+                                <p id="status">En attente d'une génération.</p>
+                                <div id="statusDetails"></div>
+                            </div>
+                            <div id="resultsGrid" class="results-grid"></div>
+                        </section>
+                    </section>
+
+                    <!-- Gallery View - All generations from all projects -->
+                    <section class="app-view" data-view="gallery">
+                        <section class="gallery-header card">
+                            <div class="gallery-header-content">
+                                <div class="gallery-title">
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <rect
+                                            x="3"
+                                            y="3"
+                                            width="7"
+                                            height="7"
+                                            rx="1"
+                                        />
+                                        <rect
+                                            x="14"
+                                            y="3"
+                                            width="7"
+                                            height="7"
+                                            rx="1"
+                                        />
+                                        <rect
+                                            x="3"
+                                            y="14"
+                                            width="7"
+                                            height="7"
+                                            rx="1"
+                                        />
+                                        <rect
+                                            x="14"
+                                            y="14"
+                                            width="7"
+                                            height="7"
+                                            rx="1"
+                                        />
+                                    </svg>
+                                    <div>
+                                        <h1>Galerie</h1>
+                                        <p class="muted">
+                                            Toutes vos générations en un seul
+                                            endroit.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="gallery-stats">
+                                    <div class="stat-item">
+                                        <span
+                                            id="totalImages"
+                                            class="stat-value"
+                                            >0</span
+                                        >
+                                        <span class="stat-label">Images</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="gallery-filters">
+                                <div class="search-box">
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <circle cx="11" cy="11" r="8" />
+                                        <path d="m21 21-4.35-4.35" />
+                                    </svg>
+                                    <input
+                                        id="gallerySearch"
+                                        type="text"
+                                        placeholder="Rechercher par prompt..."
+                                    />
+                                </div>
+                                <select id="gallerySort" class="filter-select">
+                                    <option value="recent">Plus récents</option>
+                                    <option value="oldest">Plus anciens</option>
+                                </select>
+                            </div>
+                        </section>
+
+                        <section class="gallery-content">
+                            <p id="galleryEmpty" class="empty-state card">
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <rect
+                                        x="3"
+                                        y="3"
+                                        width="18"
+                                        height="18"
+                                        rx="2"
+                                        ry="2"
+                                    />
+                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                    <polyline points="21 15 16 10 5 21" />
+                                </svg>
+                                <span>Aucune génération pour le moment.</span>
+                                <span class="muted"
+                                    >Vos images apparaîtront ici après
+                                    génération.</span
+                                >
+                            </p>
+                            <div id="galleryGrid" class="gallery-grid"></div>
+                            <button
+                                id="galleryLoadMore"
+                                class="btn btn-outline"
+                                type="button"
+                                hidden
+                            >
+                                Charger plus d'images
+                            </button>
+                        </section>
+                    </section>
+
+                    <section class="app-view" data-view="admin">
+                        <section id="adminPanel" class="card admin-card" hidden>
+                            <div class="card-header">
+                                <h2>Administration</h2>
+                                <p>Gestion des accès, rôles et comptes.</p>
+                            </div>
+                            <form id="adminCreateForm" class="admin-form">
+                                <div class="admin-form-row">
+                                    <div class="admin-field">
+                                        <label
+                                            class="field-label"
+                                            for="adminEmail"
+                                            >Email</label
+                                        >
+                                        <input
+                                            id="adminEmail"
+                                            type="email"
+                                            placeholder="utilisateur@entreprise.com"
+                                            required
+                                        />
+                                    </div>
+                                    <div class="admin-field">
+                                        <label
+                                            class="field-label"
+                                            for="adminPassword"
+                                            >Mot de passe</label
+                                        >
+                                        <input
+                                            id="adminPassword"
+                                            type="password"
+                                            placeholder="Mot de passe temporaire"
+                                            required
+                                        />
+                                    </div>
+                                    <div class="admin-field">
+                                        <label
+                                            class="field-label"
+                                            for="adminRole"
+                                            >Rôle</label
+                                        >
+                                        <select id="adminRole">
+                                            <option value="member">
+                                                Member
+                                            </option>
+                                            <option value="admin">Admin</option>
+                                        </select>
+                                    </div>
+                                    <button
+                                        id="adminCreateBtn"
+                                        class="btn btn-primary"
+                                        type="submit"
+                                    >
+                                        Créer
+                                    </button>
+                                </div>
+                                <p id="adminStatus" class="note"></p>
+                            </form>
+                            <div class="admin-list">
+                                <div class="admin-list-header">
+                                    <span>Email</span>
+                                    <span>Rôle</span>
+                                    <span>Statut</span>
+                                    <span>Actions</span>
+                                </div>
+                                <div
+                                    id="adminUsers"
+                                    class="admin-list-body"
+                                ></div>
+                            </div>
+                        </section>
+                        <section id="usagePanel" class="card admin-card" hidden>
+                            <div class="card-header">
+                                <h2>Suivi des couts API</h2>
+                                <p>
+                                    Consommation Gemini estimee par periode et
+                                    par utilisateur.
+                                </p>
+                            </div>
+                            <div class="usage-controls">
+                                <select id="usagePeriod" class="filter-select">
+                                    <option value="day">Aujourd'hui</option>
+                                    <option value="month" selected>
+                                        Ce mois
+                                    </option>
+                                    <option value="all">Tout</option>
+                                </select>
+                                <button
+                                    id="usageRefresh"
+                                    class="btn btn-outline btn-sm"
+                                    type="button"
+                                >
+                                    Actualiser
+                                </button>
+                            </div>
+                            <div class="usage-summary" id="usageSummary">
+                                <div class="stat-item">
+                                    <span id="usageTotalCost" class="stat-value"
+                                        >$0.00</span
+                                    >
+                                    <span class="stat-label"
+                                        >Cout total (USD)</span
+                                    >
+                                </div>
+                                <div class="stat-item">
+                                    <span
+                                        id="usageTotalCalls"
+                                        class="stat-value"
+                                        >0</span
+                                    >
+                                    <span class="stat-label">Appels API</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span
+                                        id="usageTotalImages"
+                                        class="stat-value"
+                                        >0</span
+                                    >
+                                    <span class="stat-label"
+                                        >Images generees</span
+                                    >
+                                </div>
+                                <div class="stat-item">
+                                    <span
+                                        id="usageSuccessRate"
+                                        class="stat-value"
+                                        >0%</span
+                                    >
+                                    <span class="stat-label"
+                                        >Taux de succes</span
+                                    >
+                                </div>
+                            </div>
+                            <div class="usage-section">
+                                <h3>Par utilisateur</h3>
+                                <div class="admin-list">
+                                    <div
+                                        class="admin-list-header usage-user-header"
+                                    >
+                                        <span>Email</span>
+                                        <span>Appels</span>
+                                        <span>Cout (USD)</span>
+                                    </div>
+                                    <div
+                                        id="usagePerUser"
+                                        class="admin-list-body"
+                                    ></div>
+                                </div>
+                            </div>
+                            <div class="usage-section">
+                                <h3>Par jour</h3>
+                                <div class="admin-list">
+                                    <div
+                                        class="admin-list-header usage-daily-header"
+                                    >
+                                        <span>Date</span>
+                                        <span>Appels</span>
+                                        <span>Cout (USD)</span>
+                                    </div>
+                                    <div
+                                        id="usageDaily"
+                                        class="admin-list-body"
+                                    ></div>
+                                </div>
+                            </div>
+                        </section>
+                    </section>
+                </div>
+            </main>
         </div>
-      </aside>
 
-      <main class="app-shell">
-      <div class="app-views">
-        <section class="app-view is-active" data-view="workspace">
-          <section class="hero card hero-wide">
-            <div class="hero-copy">
-              <h1>Des variantes graphiques alignées avec votre charte, en quelques minutes.</h1>
-              <p class="subtitle">
-                Importez un graphique, ajoutez des inspirations et orientez l'IA pour produire des variantes
-                professionnelles prêtes à livrer.
-              </p>
-              <div class="hero-metrics" aria-label="Informations clés">
-                <div class="metric">
-                  <span class="metric-value">~1 min</span>
-                  <span class="metric-label">Temps moyen</span>
-                </div>
-                <span class="metric-divider" aria-hidden="true"></span>
-                <div class="metric">
-                  <span class="metric-value">~0,15 €</span>
-                  <span class="metric-label">Coût moyen / image</span>
-                </div>
-              </div>
+        <div id="previewModal" class="modal" aria-hidden="true">
+            <div class="modal-backdrop" data-modal-close></div>
+            <div
+                class="modal-content"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Aperçu"
+            >
+                <button class="modal-close" type="button" data-modal-close>
+                    ×
+                </button>
+                <img id="previewImage" alt="Aperçu de la génération" />
             </div>
-          </section>
-
-          <section class="inputs-row">
-            <article class="card">
-              <div class="card-header">
-                <h2>Graphique source</h2>
-                <p>Importe le visuel à améliorer.</p>
-              </div>
-              <div class="dropzone" data-zone="base">
-                <input id="baseInput" type="file" accept="image/*" hidden />
-                <div class="dropzone-content">
-                  <p>Glissez-déposez votre graphique</p>
-                  <span>ou cliquez pour importer</span>
-                </div>
-                <div id="basePreview" class="preview-single"></div>
-              </div>
-            </article>
-
-            <article class="card">
-              <div class="card-header">
-                <h2>Inspirations</h2>
-                <p>Jusqu'à 4 références de style.</p>
-              </div>
-              <div class="dropzone" data-zone="inspo">
-                <input id="inspoInput" type="file" accept="image/*" multiple hidden />
-                <div class="dropzone-content">
-                  <p>Ajoutez des références visuelles</p>
-                  <span>styles, palettes, layouts, typographies</span>
-                </div>
-                <div id="inspoPreview" class="preview-grid"></div>
-              </div>
-            </article>
-
-            <article class="card">
-              <div class="card-header">
-                <h2>Prompt</h2>
-                <p>Décris le style, la hiérarchie, les couleurs.</p>
-              </div>
-              <textarea
-                id="prompt"
-                class="prompt-area"
-                placeholder="Ex: style minimal, palette bleu nuit, forte hiérarchie typographique..."
-                rows="6"
-              ></textarea>
-            </article>
-          </section>
-
-          <section class="generate-row">
-            <button id="generate" class="btn btn-primary btn-lg">Générer</button>
-            <div class="generate-controls">
-              <p class="field-label">Nombre d'images</p>
-              <div class="count-picker" role="radiogroup" aria-label="Nombre d'images">
-                <label class="count-option">
-                  <input type="radio" name="count" value="1" />
-                  <span>1</span>
-                </label>
-                <label class="count-option">
-                  <input type="radio" name="count" value="2" checked />
-                  <span>2</span>
-                </label>
-                <label class="count-option">
-                  <input type="radio" name="count" value="3" />
-                  <span>3</span>
-                </label>
-                <label class="count-option">
-                  <input type="radio" name="count" value="4" />
-                  <span>4</span>
-                </label>
-              </div>
-            </div>
-          </section>
-
-          <section class="card results-card">
-            <div class="results-header">
-              <div>
-                <h2>Résultats</h2>
-                <p class="muted">Générations de la session en cours.</p>
-              </div>
-            </div>
-            <div class="status">
-              <p id="status">En attente d'une génération.</p>
-              <div id="statusDetails"></div>
-            </div>
-            <div id="resultsGrid" class="results-grid"></div>
-          </section>
-        </section>
-
-        <!-- Gallery View - All generations from all projects -->
-        <section class="app-view" data-view="gallery">
-          <section class="gallery-header card">
-            <div class="gallery-header-content">
-              <div class="gallery-title">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="3" width="7" height="7" rx="1"/>
-                  <rect x="14" y="3" width="7" height="7" rx="1"/>
-                  <rect x="3" y="14" width="7" height="7" rx="1"/>
-                  <rect x="14" y="14" width="7" height="7" rx="1"/>
-                </svg>
-                <div>
-                  <h1>Galerie</h1>
-                  <p class="muted">Toutes vos générations en un seul endroit.</p>
-                </div>
-              </div>
-              <div class="gallery-stats">
-                <div class="stat-item">
-                  <span id="totalImages" class="stat-value">0</span>
-                  <span class="stat-label">Images</span>
-                </div>
-              </div>
-            </div>
-            <div class="gallery-filters">
-              <div class="search-box">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="11" cy="11" r="8"/>
-                  <path d="m21 21-4.35-4.35"/>
-                </svg>
-                <input id="gallerySearch" type="text" placeholder="Rechercher par prompt..." />
-              </div>
-              <select id="gallerySort" class="filter-select">
-                <option value="recent">Plus récents</option>
-                <option value="oldest">Plus anciens</option>
-              </select>
-            </div>
-          </section>
-
-          <section class="gallery-content">
-            <p id="galleryEmpty" class="empty-state card">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-              <span>Aucune génération pour le moment.</span>
-              <span class="muted">Vos images apparaîtront ici après génération.</span>
-            </p>
-            <div id="galleryGrid" class="gallery-grid"></div>
-            <button id="galleryLoadMore" class="btn btn-outline" type="button" hidden>
-              Charger plus d'images
-            </button>
-          </section>
-        </section>
-
-        <section class="app-view" data-view="admin">
-          <section id="adminPanel" class="card admin-card" hidden>
-            <div class="card-header">
-              <h2>Administration</h2>
-              <p>Gestion des accès, rôles et comptes.</p>
-            </div>
-            <form id="adminCreateForm" class="admin-form">
-              <div class="admin-form-row">
-                <div class="admin-field">
-                  <label class="field-label" for="adminEmail">Email</label>
-                  <input id="adminEmail" type="email" placeholder="utilisateur@entreprise.com" required />
-                </div>
-                <div class="admin-field">
-                  <label class="field-label" for="adminPassword">Mot de passe</label>
-                  <input id="adminPassword" type="password" placeholder="Mot de passe temporaire" required />
-                </div>
-                <div class="admin-field">
-                  <label class="field-label" for="adminRole">Rôle</label>
-                  <select id="adminRole">
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-                <button id="adminCreateBtn" class="btn btn-primary" type="submit">Créer</button>
-              </div>
-              <p id="adminStatus" class="note"></p>
-            </form>
-            <div class="admin-list">
-              <div class="admin-list-header">
-                <span>Email</span>
-                <span>Rôle</span>
-                <span>Statut</span>
-                <span>Actions</span>
-              </div>
-              <div id="adminUsers" class="admin-list-body"></div>
-            </div>
-          </section>
-        </section>
-      </div>
-    </main>
-    </div>
-
-    <div id="previewModal" class="modal" aria-hidden="true">
-      <div class="modal-backdrop" data-modal-close></div>
-      <div class="modal-content" role="dialog" aria-modal="true" aria-label="Aperçu">
-        <button class="modal-close" type="button" data-modal-close>×</button>
-        <img id="previewImage" alt="Aperçu de la génération" />
-      </div>
-    </div>
-
-    <div id="deleteProjectModal" class="modal" aria-hidden="true">
-      <div class="modal-backdrop" data-delete-close></div>
-      <div class="modal-content delete-modal-content" role="dialog" aria-modal="true" aria-label="Confirmer la suppression">
-        <div class="delete-modal-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
         </div>
-        <h3>Supprimer ce projet ?</h3>
-        <p class="delete-modal-project-name" id="deleteProjectName"></p>
-        <div class="delete-modal-warning">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-          <p>Toutes les images générées dans ce projet seront définitivement supprimées. Cette action est irréversible.</p>
-        </div>
-        <div class="delete-modal-actions">
-          <button type="button" class="btn btn-outline" data-delete-close>Annuler</button>
-          <button type="button" class="btn btn-danger" id="confirmDeleteProject">Supprimer le projet</button>
-        </div>
-      </div>
-    </div>
 
-    <div id="refineModal" class="modal" aria-hidden="true">
-      <div class="modal-backdrop" data-refine-close></div>
-      <div class="modal-content refine-content" role="dialog" aria-modal="true" aria-label="Modifier la génération">
-        <button class="modal-close" type="button" data-refine-close>×</button>
-        <div class="refine-layout">
-          <div class="refine-preview">
-            <img id="refineImage" alt="Version sélectionnée" />
-          </div>
-          <div class="refine-controls">
-            <h3>Modifier cette version</h3>
-            <textarea
-              id="refinePrompt"
-              rows="6"
-              placeholder="Décris les modifications à apporter..."
-            ></textarea>
-            <div class="refine-actions">
-              <button type="button" class="btn btn-outline" data-refine-close>Annuler</button>
-              <button id="refineGenerate" class="btn btn-primary">Appliquer les modifications</button>
+        <div id="deleteProjectModal" class="modal" aria-hidden="true">
+            <div class="modal-backdrop" data-delete-close></div>
+            <div
+                class="modal-content delete-modal-content"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Confirmer la suppression"
+            >
+                <div class="delete-modal-icon">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path
+                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                        />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                </div>
+                <h3>Supprimer ce projet ?</h3>
+                <p class="delete-modal-project-name" id="deleteProjectName"></p>
+                <div class="delete-modal-warning">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <p>
+                        Toutes les images générées dans ce projet seront
+                        définitivement supprimées. Cette action est
+                        irréversible.
+                    </p>
+                </div>
+                <div class="delete-modal-actions">
+                    <button
+                        type="button"
+                        class="btn btn-outline"
+                        data-delete-close
+                    >
+                        Annuler
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-danger"
+                        id="confirmDeleteProject"
+                    >
+                        Supprimer le projet
+                    </button>
+                </div>
             </div>
-          </div>
         </div>
-      </div>
-    </div>
 
-    <div id="downloadModal" class="modal" aria-hidden="true">
-      <div class="modal-backdrop"></div>
-      <div class="modal-content download-modal-content" role="dialog" aria-modal="true" aria-label="Téléchargement en cours">
-        <div class="download-modal-animation">
-          <div class="download-spinner"></div>
+        <div id="refineModal" class="modal" aria-hidden="true">
+            <div class="modal-backdrop" data-refine-close></div>
+            <div
+                class="modal-content refine-content"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Modifier la génération"
+            >
+                <button class="modal-close" type="button" data-refine-close>
+                    ×
+                </button>
+                <div class="refine-layout">
+                    <div class="refine-preview">
+                        <img id="refineImage" alt="Version sélectionnée" />
+                    </div>
+                    <div class="refine-controls">
+                        <h3>Modifier cette version</h3>
+                        <textarea
+                            id="refinePrompt"
+                            rows="6"
+                            placeholder="Décris les modifications à apporter..."
+                        ></textarea>
+                        <div class="refine-actions">
+                            <button
+                                type="button"
+                                class="btn btn-outline"
+                                data-refine-close
+                            >
+                                Annuler
+                            </button>
+                            <button id="refineGenerate" class="btn btn-primary">
+                                Appliquer les modifications
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <h3>Préparation du téléchargement</h3>
-        <p class="download-modal-status">Génération en haute qualité (4K)...</p>
-        <p class="download-modal-note">Cette opération peut prendre jusqu'à une minute.</p>
-      </div>
-    </div>
 
-    <div id="passwordModal" class="modal" aria-hidden="true">
-      <div class="modal-backdrop"></div>
-      <div class="modal-content password-modal-content" role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
-        <h3 id="passwordModalTitle">Changer le mot de passe</h3>
-        <form id="passwordForm" class="password-form">
-          <div class="form-group">
-            <label class="field-label" for="newPassword">Nouveau mot de passe</label>
-            <input id="newPassword" type="password" placeholder="Minimum 6 caractères" required minlength="6" />
-          </div>
-          <div class="form-group">
-            <label class="field-label" for="confirmPassword">Confirmer le mot de passe</label>
-            <input id="confirmPassword" type="password" placeholder="Répétez le mot de passe" required minlength="6" />
-          </div>
-          <p id="passwordError" class="password-error" hidden></p>
-          <div class="modal-actions">
-            <button type="button" class="btn btn-ghost" id="cancelPasswordBtn">Annuler</button>
-            <button type="submit" class="btn btn-primary" id="submitPasswordBtn">Enregistrer</button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div id="downloadModal" class="modal" aria-hidden="true">
+            <div class="modal-backdrop"></div>
+            <div
+                class="modal-content download-modal-content"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Téléchargement en cours"
+            >
+                <div class="download-modal-animation">
+                    <div class="download-spinner"></div>
+                </div>
+                <h3>Préparation du téléchargement</h3>
+                <p class="download-modal-status">
+                    Génération en haute qualité (4K)...
+                </p>
+                <p class="download-modal-note">
+                    Cette opération peut prendre jusqu'à une minute.
+                </p>
+            </div>
+        </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js"></script>
-  </body>
+        <div id="passwordModal" class="modal" aria-hidden="true">
+            <div class="modal-backdrop"></div>
+            <div
+                class="modal-content password-modal-content"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="passwordModalTitle"
+            >
+                <h3 id="passwordModalTitle">Changer le mot de passe</h3>
+                <form id="passwordForm" class="password-form">
+                    <div class="form-group">
+                        <label class="field-label" for="newPassword"
+                            >Nouveau mot de passe</label
+                        >
+                        <input
+                            id="newPassword"
+                            type="password"
+                            placeholder="Minimum 6 caractères"
+                            required
+                            minlength="6"
+                        />
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label" for="confirmPassword"
+                            >Confirmer le mot de passe</label
+                        >
+                        <input
+                            id="confirmPassword"
+                            type="password"
+                            placeholder="Répétez le mot de passe"
+                            required
+                            minlength="6"
+                        />
+                    </div>
+                    <p id="passwordError" class="password-error" hidden></p>
+                    <div class="modal-actions">
+                        <button
+                            type="button"
+                            class="btn btn-ghost"
+                            id="cancelPasswordBtn"
+                        >
+                            Annuler
+                        </button>
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                            id="submitPasswordBtn"
+                        >
+                            Enregistrer
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+        <script src="app.js"></script>
+    </body>
 </html>
