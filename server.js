@@ -1183,7 +1183,7 @@ app.post(
         ? CREATE_SYSTEM_INSTRUCTION
         : SYSTEM_INSTRUCTION;
 
-      const STAGGER_DELAY_MS = 500; // small stagger between parallel launches to spread load
+      const STAGGER_DELAY_MS = 2000; // delay between sequential calls to let API recover
 
       const onProgress = (evt) => {
         try { res.write(JSON.stringify({ type: "progress", ...evt }) + "\n"); } catch (_) {}
@@ -1195,10 +1195,12 @@ app.post(
           config?.imageConfig?.imageSize ||
           normalizedImageConfig?.imageSize ||
           "1K";
+        const batchImages = [];
+        const batchErrors = [];
+        let batchCostUsd = 0;
 
-        const makeCall = async (index) => {
-          // Small stagger so requests don't all hit the API at the exact same millisecond
-          if (index > 0) await sleep(STAGGER_DELAY_MS * index);
+        for (let index = 0; index < count; index++) {
+          if (index > 0) await sleep(STAGGER_DELAY_MS);
 
           const variantNum = safeOffset + index + 1;
           onProgress({ event: "variant", index: variantNum, total: safeCount });
@@ -1223,6 +1225,14 @@ app.post(
             });
             const imgs = result.images;
             console.log(`[${reqId}] variant ${variantNum}/${safeCount} ok, ${imgs.length} image(s)`);
+            batchImages.push(...imgs);
+            const cost = calculateCostUsd({
+              promptTokenCount: result.usage?.promptTokenCount,
+              candidatesTokenCount: result.usage?.candidatesTokenCount,
+              outputImageCount: imgs.length,
+              imageSize: batchImageSize,
+            });
+            if (cost) batchCostUsd += cost;
             logApiUsage({
               userId: req.user.id,
               mode,
@@ -1233,9 +1243,9 @@ app.post(
               isFallback,
               success: true,
             });
-            return { ok: true, images: imgs, usage: result.usage };
           } catch (err) {
             console.log(`[${reqId}] variant ${variantNum}/${safeCount} error: ${err?.status} ${err?.message}`);
+            batchErrors.push(err);
             logApiUsage({
               userId: req.user.id,
               mode,
@@ -1246,31 +1256,6 @@ app.post(
               isFallback,
               success: false,
             });
-            return { ok: false, error: err };
-          }
-        };
-
-        const results = await Promise.allSettled(
-          Array.from({ length: count }, (_, i) => makeCall(i)),
-        );
-
-        const batchImages = [];
-        const batchErrors = [];
-        let batchCostUsd = 0;
-
-        for (const settled of results) {
-          const r = settled.status === "fulfilled" ? settled.value : { ok: false, error: settled.reason };
-          if (r.ok) {
-            batchImages.push(...r.images);
-            const cost = calculateCostUsd({
-              promptTokenCount: r.usage?.promptTokenCount,
-              candidatesTokenCount: r.usage?.candidatesTokenCount,
-              outputImageCount: r.images.length,
-              imageSize: batchImageSize,
-            });
-            if (cost) batchCostUsd += cost;
-          } else {
-            batchErrors.push(r.error);
           }
         }
 
