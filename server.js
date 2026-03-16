@@ -503,16 +503,34 @@ const buildNoImageResponse = (errors) => {
   if (!Array.isArray(errors) || errors.length === 0) {
     return {
       status: 502,
-      message:
-        "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
+      message: "Aucune image n'a été retournée. Réessaie dans quelques instants.",
+    };
+  }
+
+  const hasHighDemand = errors.some((e) => {
+    const msg = (e?.message || "").toLowerCase();
+    return msg.includes("high demand") || msg.includes("try again later");
+  });
+  const hasTimeout = errors.some((e) => Number(e?.status) === 504);
+
+  if (hasHighDemand) {
+    return {
+      status: 503,
+      message: "Les serveurs de Google sont actuellement surchargés. Le modèle d'IA que nous utilisons (Google Gemini) subit un pic de demande. Réessaie dans quelques minutes.",
+    };
+  }
+
+  if (hasTimeout) {
+    return {
+      status: 504,
+      message: "La génération a pris trop de temps. Les serveurs de Google (Gemini) sont probablement ralentis. Réessaie dans quelques instants.",
     };
   }
 
   if (errors.some(isTransientGenerationError)) {
     return {
       status: 503,
-      message:
-        "Le modèle est temporairement indisponible (forte demande). Réessaie dans quelques instants.",
+      message: "Les serveurs de Google (Gemini) sont temporairement indisponibles. Réessaie dans quelques instants.",
     };
   }
 
@@ -522,15 +540,13 @@ const buildNoImageResponse = (errors) => {
   if (clientError) {
     return {
       status: Number(clientError.status) || 400,
-      message:
-        "La génération a échoué côté modèle. Vérifie le prompt et les paramètres puis réessaie.",
+      message: "La génération a échoué. Vérifie le prompt et les paramètres puis réessaie.",
     };
   }
 
   return {
     status: 502,
-    message:
-      "Le service de génération n'a pas pu produire d'image. Réessaie dans quelques instants.",
+    message: "Le service de génération n'a pas pu produire d'image. Réessaie dans quelques instants.",
   };
 };
 
@@ -1295,23 +1311,31 @@ app.post(
       if (images.length === 0) {
         console.log(`[${reqId}] done: 0 images, ${errors.length} errors`);
         const noImageResponse = buildNoImageResponse(errors);
-        res.write(JSON.stringify({ type: "result", ok: false, status: noImageResponse.status, error: noImageResponse.message, errors }) + "\n");
+        // Don't expose raw Google API errors to the user for transient issues
+        const userErrors = errors.every(isTransientGenerationError) ? [] : errors;
+        res.write(JSON.stringify({ type: "result", ok: false, status: noImageResponse.status, error: noImageResponse.message, errors: userErrors }) + "\n");
         return res.end();
       }
 
       if (images.length < safeCount) {
-        warnings.push(
-          `Le modele a retourne ${images.length} image(s) sur ${safeCount}.`,
-        );
-      }
-      if (errors.length > 0) {
-        warnings.push("Certaines tentatives ont echoue, consulte les details.");
+        const hasTransient = errors.some(isTransientGenerationError);
+        if (hasTransient) {
+          warnings.push(
+            `${images.length} image(s) sur ${safeCount} générée(s). Les serveurs de Google (Gemini) sont ralentis, réessaie pour les images manquantes.`,
+          );
+        } else {
+          warnings.push(
+            `Le modèle a retourné ${images.length} image(s) sur ${safeCount}.`,
+          );
+        }
       }
 
       const generationCostEur =
         Math.round(generationCostUsd * USD_TO_EUR * 100) / 100;
 
       console.log(`[${reqId}] done: ${images.length} images, ${errors.length} errors, ${generationCostEur}€`);
+      // Don't expose raw API errors to the user — warnings already contain user-friendly messages
+      const userErrors = errors.filter((e) => !isTransientGenerationError(e));
       res.write(JSON.stringify({
         type: "result",
         ok: true,
@@ -1319,7 +1343,7 @@ app.post(
         requested: safeCount,
         received: images.length,
         warnings,
-        errors,
+        errors: userErrors,
         estimatedCostEur: generationCostEur,
       }) + "\n");
       return res.end();
