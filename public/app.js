@@ -186,6 +186,59 @@ const authorizedFetch = async (url, options = {}) => {
   return fetch(url, { ...options, headers });
 };
 
+/**
+ * Reads an NDJSON stream from a generate response.
+ * Calls onProgress for each progress event and returns the final result event.
+ */
+const readGenerateStream = async (response, onProgress) => {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const event = JSON.parse(trimmed);
+        if (event.type === "progress") {
+          if (onProgress) onProgress(event);
+        } else if (event.type === "result") {
+          result = event;
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (buffer.trim()) {
+    try {
+      const event = JSON.parse(buffer.trim());
+      if (event.type === "result") result = event;
+    } catch (_) {}
+  }
+
+  return result;
+};
+
+const formatProgressMessage = (event) => {
+  if (event.event === "variant") {
+    return `Génération de la variante ${event.index}/${event.total}...`;
+  }
+  if (event.event === "retry") {
+    const label = event.variantIndex ? `variante ${event.variantIndex}/${event.variantTotal}` : "image";
+    return `Erreur API (${event.status}), nouvelle tentative ${event.attempt}/${event.maxAttempts} pour ${label}...`;
+  }
+  return "Génération en cours...";
+};
+
 const initSupabase = async () => {
   if (supabaseClient) return supabaseClient;
   const response = await fetch("/api/config");
@@ -600,10 +653,18 @@ const downloadHighQuality = async (image) => {
       }),
     });
 
-    const data = await response.json();
+    if (response.status !== 200) {
+      closeDownloadModal();
+      setStatus("Erreur lors de la génération haute qualité.", "error");
+      return;
+    }
+
+    const data = await readGenerateStream(response, (event) => {
+      setStatus(formatProgressMessage(event), "");
+    });
     closeDownloadModal();
 
-    if (!response.ok || !data.images || data.images.length === 0) {
+    if (!data || !data.ok || !data.images || data.images.length === 0) {
       setStatus("Erreur lors de la génération haute qualité.", "error");
       return;
     }
@@ -1270,20 +1331,17 @@ const generateImages = async () => {
       }),
     });
 
-    const data = await response.json();
-
     if (response.status === 429) {
+      const data = await response.json();
       clearLoading(loadingCards);
       resultsGrid.innerHTML = "";
       loadQuota();
-      setStatus(
-        data?.error || "Limite quotidienne atteinte.",
-        "quota",
-      );
+      setStatus(data?.error || "Limite quotidienne atteinte.", "quota");
       return;
     }
 
-    if (!response.ok) {
+    if (response.status !== 200) {
+      const data = await response.json().catch(() => ({}));
       const details = [];
       if (Array.isArray(data?.errors)) {
         data.errors.forEach((error) => {
@@ -1294,20 +1352,24 @@ const generateImages = async () => {
           if (parts.length > 0) details.push(parts.join(" · "));
         });
       }
-      if (Array.isArray(data?.details)) {
-        data.details.forEach((detail) => details.push(detail));
-      }
-      setStatus(
-        data?.error || "Erreur lors de la génération.",
-        "error",
-        details,
-      );
+      setStatus(data?.error || "Erreur lors de la génération.", "error", details);
       clearLoading(loadingCards);
       resultsGrid.innerHTML = "";
       return;
     }
 
-    if (!data.images || data.images.length === 0) {
+    const data = await readGenerateStream(response, (event) => {
+      setStatus(formatProgressMessage(event), "");
+    });
+
+    if (!data) {
+      setStatus("Erreur : aucune réponse du serveur.", "error");
+      clearLoading(loadingCards);
+      resultsGrid.innerHTML = "";
+      return;
+    }
+
+    if (!data.ok || !data.images || data.images.length === 0) {
       const details = Array.isArray(data?.errors)
         ? data.errors
             .map((error) => {
@@ -1320,7 +1382,7 @@ const generateImages = async () => {
             .filter(Boolean)
         : [];
       setStatus(
-        "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
+        data?.error || "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
         "error",
         details,
       );
@@ -1397,19 +1459,16 @@ const generateRefine = async () => {
       }),
     });
 
-    const data = await response.json();
-
     if (response.status === 429) {
+      const data = await response.json();
       clearLoading(loadingCards);
       loadQuota();
-      setStatus(
-        data?.error || "Limite quotidienne atteinte.",
-        "quota",
-      );
+      setStatus(data?.error || "Limite quotidienne atteinte.", "quota");
       return;
     }
 
-    if (!response.ok) {
+    if (response.status !== 200) {
+      const data = await response.json().catch(() => ({}));
       const details = [];
       if (Array.isArray(data?.errors)) {
         data.errors.forEach((error) => {
@@ -1420,19 +1479,16 @@ const generateRefine = async () => {
           if (parts.length > 0) details.push(parts.join(" · "));
         });
       }
-      if (Array.isArray(data?.details)) {
-        data.details.forEach((detail) => details.push(detail));
-      }
-      setStatus(
-        data?.error || "Erreur lors de la modification.",
-        "error",
-        details,
-      );
+      setStatus(data?.error || "Erreur lors de la modification.", "error", details);
       clearLoading(loadingCards);
       return;
     }
 
-    if (!data.images || data.images.length === 0) {
+    const data = await readGenerateStream(response, (event) => {
+      setStatus(formatProgressMessage(event), "");
+    });
+
+    if (!data || !data.ok || !data.images || data.images.length === 0) {
       const details = Array.isArray(data?.errors)
         ? data.errors
             .map((error) => {
@@ -1445,7 +1501,7 @@ const generateRefine = async () => {
             .filter(Boolean)
         : [];
       setStatus(
-        "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
+        data?.error || "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
         "error",
         details,
       );
@@ -1550,23 +1606,20 @@ const generateCreate = async () => {
       body: JSON.stringify(body),
     });
 
-    const data = await response.json();
-
     if (response.status === 429) {
+      const data = await response.json();
       loadingCards.forEach((c) => c.remove());
       if (createResultsGrid) {
         createResultsGrid.classList.remove("loading-grid");
         createResultsGrid.innerHTML = "";
       }
       loadQuota();
-      setCreateStatus(
-        data?.error || "Limite quotidienne atteinte.",
-        "quota",
-      );
+      setCreateStatus(data?.error || "Limite quotidienne atteinte.", "quota");
       return;
     }
 
-    if (!response.ok) {
+    if (response.status !== 200) {
+      const data = await response.json().catch(() => ({}));
       const details = [];
       if (Array.isArray(data?.errors)) {
         data.errors.forEach((error) => {
@@ -1577,14 +1630,7 @@ const generateCreate = async () => {
           if (parts.length > 0) details.push(parts.join(" · "));
         });
       }
-      if (Array.isArray(data?.details)) {
-        data.details.forEach((detail) => details.push(detail));
-      }
-      setCreateStatus(
-        data?.error || "Erreur lors de la génération.",
-        "error",
-        details,
-      );
+      setCreateStatus(data?.error || "Erreur lors de la génération.", "error", details);
       loadingCards.forEach((c) => c.remove());
       if (createResultsGrid) {
         createResultsGrid.classList.remove("loading-grid");
@@ -1593,7 +1639,11 @@ const generateCreate = async () => {
       return;
     }
 
-    if (!data.images || data.images.length === 0) {
+    const data = await readGenerateStream(response, (event) => {
+      setCreateStatus(formatProgressMessage(event), "");
+    });
+
+    if (!data || !data.ok || !data.images || data.images.length === 0) {
       const details = Array.isArray(data?.errors)
         ? data.errors
             .map((error) => {
@@ -1606,7 +1656,7 @@ const generateCreate = async () => {
             .filter(Boolean)
         : [];
       setCreateStatus(
-        "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
+        data?.error || "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
         "error",
         details,
       );

@@ -32,7 +32,7 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const GEMINI_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent";
 const GEMINI_CREATE_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent";
+  "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3.1-flash-image-preview:generateContent";
 const VALID_ASPECT_RATIOS = new Set([
   "1:1",
   "2:3",
@@ -538,7 +538,7 @@ const buildNoImageResponse = (errors) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpoint, maxRetries = 3 }) => {
+const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpoint, maxRetries = 3, onProgress, label = "" }) => {
   const body = {
     system_instruction: systemInstruction || SYSTEM_INSTRUCTION,
     contents: [
@@ -572,7 +572,8 @@ const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpo
         const apiError = buildApiError(data, response.status);
         if (attempt < maxRetries && isTransientGenerationError(apiError)) {
           const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 8000);
-          console.log(`Gemini ${response.status} (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
+          console.log(`[${label}] Gemini ${response.status} (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
+          if (onProgress) onProgress({ event: "retry", attempt: attempt + 1, maxAttempts: maxRetries + 1, status: response.status, delayMs: Math.round(delay) });
           clearTimeout(timeoutId);
           await sleep(delay);
           continue;
@@ -598,7 +599,8 @@ const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpo
       };
       if (attempt < maxRetries && isTransientGenerationError(wrapped)) {
         const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 8000);
-        console.log(`Gemini error (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
+        console.log(`[${label}] Gemini error (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
+        if (onProgress) onProgress({ event: "retry", attempt: attempt + 1, maxAttempts: maxRetries + 1, status: wrapped.status, delayMs: Math.round(delay) });
         await sleep(delay);
         continue;
       }
@@ -609,8 +611,8 @@ const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpo
   }
 };
 
-const callGemini = async ({ parts, generationConfig, systemInstruction, endpoint }) => {
-  const data = await callGeminiRaw({ parts, generationConfig, systemInstruction, endpoint });
+const callGemini = async ({ parts, generationConfig, systemInstruction, endpoint, onProgress, label }) => {
+  const data = await callGeminiRaw({ parts, generationConfig, systemInstruction, endpoint, onProgress, label });
   const meta = data?.usageMetadata || data?.usage_metadata || null;
   return {
     images: extractImages(data),
@@ -1140,6 +1142,9 @@ app.post(
       mode,
     } = req.body || {};
 
+    const reqId = Math.random().toString(36).slice(2, 8);
+    console.log(`[generate:${reqId}] mode=${mode} numImages=${numImages} user=${req.user?.email}`);
+
     const isCreateMode = mode === "create";
 
     if (!isCreateMode && (!baseImage?.data || !baseImage?.mimeType)) {
@@ -1159,6 +1164,11 @@ app.post(
           .slice(0, 4)
       : [];
 
+    res.setHeader("Content-Type", "application/x-ndjson");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
     try {
       const errors = [];
       const warnings = [];
@@ -1175,6 +1185,10 @@ app.post(
 
       const STAGGER_DELAY_MS = 1500; // delay between sequential API calls to avoid rate limits
 
+      const onProgress = (evt) => {
+        try { res.write(JSON.stringify({ type: "progress", ...evt }) + "\n"); } catch (_) {}
+      };
+
       const runBatch = async (count, config, offset, isFallback = false) => {
         const safeOffset = Number.isInteger(offset) ? offset : 0;
         const batchImageSize =
@@ -1188,6 +1202,8 @@ app.post(
         for (let index = 0; index < count; index++) {
           // Stagger calls to avoid hitting rate limits
           if (index > 0) await sleep(STAGGER_DELAY_MS);
+
+          onProgress({ event: "variant", index: safeOffset + index + 1, total: safeCount });
 
           try {
             const result = await callGemini({
@@ -1203,6 +1219,8 @@ app.post(
               generationConfig: config,
               systemInstruction: activeSystemInstruction,
               endpoint: isCreateMode ? GEMINI_CREATE_ENDPOINT : GEMINI_ENDPOINT,
+              onProgress: (evt) => onProgress({ ...evt, variantIndex: safeOffset + index + 1, variantTotal: safeCount }),
+              label: `${reqId}:v${safeOffset + index + 1}${isFallback ? ":fb" : ""}`,
             });
             const imgs = result.images;
             batchImages.push(...imgs);
@@ -1271,10 +1289,8 @@ app.post(
 
       if (images.length === 0) {
         const noImageResponse = buildNoImageResponse(errors);
-        return res.status(noImageResponse.status).json({
-          error: noImageResponse.message,
-          errors,
-        });
+        res.write(JSON.stringify({ type: "result", ok: false, status: noImageResponse.status, error: noImageResponse.message, errors }) + "\n");
+        return res.end();
       }
 
       if (images.length < safeCount) {
@@ -1289,19 +1305,20 @@ app.post(
       const generationCostEur =
         Math.round(generationCostUsd * USD_TO_EUR * 100) / 100;
 
-      return res.json({
+      res.write(JSON.stringify({
+        type: "result",
+        ok: true,
         images,
         requested: safeCount,
         received: images.length,
         warnings,
         errors,
         estimatedCostEur: generationCostEur,
-      });
+      }) + "\n");
+      return res.end();
     } catch (error) {
-      return res.status(500).json({
-        error: "Erreur serveur pendant la génération.",
-        details: error?.message ? [error.message] : [],
-      });
+      res.write(JSON.stringify({ type: "result", ok: false, status: 500, error: "Erreur serveur pendant la génération.", details: error?.message ? [error.message] : [] }) + "\n");
+      return res.end();
     }
   },
 );
