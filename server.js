@@ -33,8 +33,6 @@ const GEMINI_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent";
 const GEMINI_CREATE_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent";
-const GEMINI_FALLBACK_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
 const VALID_ASPECT_RATIOS = new Set([
   "1:1",
   "2:3",
@@ -1291,27 +1289,6 @@ app.post(
         missingAfterPrimary = safeCount - images.length;
       }
 
-      // Fallback 2: all transient errors → retry with stable model (gemini-2.5-flash-image)
-      if (
-        missingAfterPrimary > 0 &&
-        batch.batchErrors.length > 0 &&
-        batch.batchErrors.every(isTransientGenerationError)
-      ) {
-        console.log(`[${reqId}] primary model unavailable, falling back to gemini-2.5-flash-image`);
-        onProgress({ event: "fallback", model: "gemini-2.5-flash-image" });
-        warnings.push("Modèle principal indisponible, utilisation du modèle de secours.");
-        const offset = safeCount - missingAfterPrimary;
-        batch = await runBatch(
-          missingAfterPrimary,
-          generationConfig,
-          offset,
-          true,
-          GEMINI_FALLBACK_ENDPOINT,
-        );
-        images = images.concat(batch.batchImages);
-        errors.push(...batch.batchErrors);
-        generationCostUsd += batch.batchCostUsd || 0;
-      }
 
       images = images.slice(0, safeCount);
 
