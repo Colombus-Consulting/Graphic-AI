@@ -447,6 +447,19 @@ p {
     white-space: nowrap;
 }
 
+.view-description {
+    font-size: 14px;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.5;
+    max-width: 720px;
+}
+
+.view-notice {
+    font-size: 13px;
+    color: hsl(var(--accent));
+    font-weight: 500;
+}
+
 /* ============================================
    Inputs - 2 column layout
    ============================================ */
