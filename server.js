@@ -563,7 +563,7 @@ const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpo
     generationConfig,
   };
 
-  const timeoutMs = process.env.VERCEL === "1" ? 55000 : 60000;
+  const timeoutMs = process.env.VERCEL === "1" ? 55000 : 90000;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController();
