@@ -1113,7 +1113,7 @@ const loadQuota = async () => {
     const response = await authorizedFetch("/api/quota");
     const data = await response.json();
     if (response.ok) {
-      const text = `${data.remaining}/${data.dailyLimit} restantes`;
+      const text = `${data.remaining}/${data.dailyLimit} images restantes aujourd'hui`;
       [quotaRemainingEl, createQuotaRemainingEl].forEach((el) => {
         if (!el) return;
         el.textContent = text;
