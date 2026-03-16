@@ -22,15 +22,15 @@ const refineGenerate = document.querySelector("#refineGenerate");
 const navToggle = document.querySelector("#navToggle");
 const navRail = document.querySelector(".nav-rail");
 const navDrawer = document.querySelector("#navDrawer");
-const projectList = document.querySelector("#projectList");
-const newProjectBtn = document.querySelector("#newProjectBtn");
-const galleryBtn = document.querySelector(".nav-gallery-btn");
-const galleryGrid = document.querySelector("#galleryGrid");
-const galleryEmpty = document.querySelector("#galleryEmpty");
-const galleryLoadMore = document.querySelector("#galleryLoadMore");
-const gallerySearch = document.querySelector("#gallerySearch");
-const gallerySort = document.querySelector("#gallerySort");
-const totalImagesEl = document.querySelector("#totalImages");
+const projectList = null;
+const newProjectBtn = null;
+const galleryBtn = null;
+const galleryGrid = null;
+const galleryEmpty = null;
+const galleryLoadMore = null;
+const gallerySearch = null;
+const gallerySort = null;
+const totalImagesEl = null;
 const authView = document.querySelector("#authView");
 const appView = document.querySelector("#appView");
 const loginForm = document.querySelector("#loginForm");
@@ -47,22 +47,26 @@ const adminPassword = document.querySelector("#adminPassword");
 const adminRole = document.querySelector("#adminRole");
 const adminStatus = document.querySelector("#adminStatus");
 const adminUsers = document.querySelector("#adminUsers");
-const adminNavBtn = document.querySelector("#adminNavBtn");
-const usagePanel = document.querySelector("#usagePanel");
+const adminNavGroup = document.querySelector("#adminNavGroup");
+const adminUsersNavBtn = document.querySelector("#adminUsersNavBtn");
+const adminUsageNavBtn = document.querySelector("#adminUsageNavBtn");
 const usagePeriod = document.querySelector("#usagePeriod");
+const usageUserFilter = document.querySelector("#usageUserFilter");
 const usageRefresh = document.querySelector("#usageRefresh");
 const usageTotalCost = document.querySelector("#usageTotalCost");
 const usageTotalCalls = document.querySelector("#usageTotalCalls");
 const usageTotalImages = document.querySelector("#usageTotalImages");
 const usageSuccessRate = document.querySelector("#usageSuccessRate");
-const usagePerUser = document.querySelector("#usagePerUser");
-const usageDaily = document.querySelector("#usageDaily");
+const usageAvgDay = document.querySelector("#usageAvgDay");
+const usageDailyChart = document.querySelector("#usageDailyChart");
+const usageDetailTitle = document.querySelector("#usageDetailTitle");
+const usageDetailTable = document.querySelector("#usageDetailTable");
 const monthlyCostEl = document.querySelector("#monthlyCost");
 const viewButtons = Array.from(document.querySelectorAll("[data-view-target]"));
 const appViews = Array.from(document.querySelectorAll(".app-view"));
-const deleteProjectModal = document.querySelector("#deleteProjectModal");
-const deleteProjectNameEl = document.querySelector("#deleteProjectName");
-const confirmDeleteProjectBtn = document.querySelector("#confirmDeleteProject");
+const deleteProjectModal = null;
+const deleteProjectNameEl = null;
+const confirmDeleteProjectBtn = null;
 const downloadModal = document.querySelector("#downloadModal");
 const passwordModal = document.querySelector("#passwordModal");
 const passwordForm = document.querySelector("#passwordForm");
@@ -71,6 +75,33 @@ const confirmPasswordInput = document.querySelector("#confirmPassword");
 const passwordError = document.querySelector("#passwordError");
 const changePasswordBtn = document.querySelector("#changePasswordBtn");
 const cancelPasswordBtn = document.querySelector("#cancelPasswordBtn");
+const redesignNavBtn = document.querySelector("#redesignNavBtn");
+const createNavBtn = document.querySelector("#createNavBtn");
+const createPromptField = document.querySelector("#createPrompt");
+const createInspoInput = document.querySelector("#createInspoInput");
+const createInspoZone = document.querySelector("[data-zone='create-inspo']");
+const createInspoPreview = document.querySelector("#createInspoPreview");
+const createBaseInput = document.querySelector("#createBaseInput");
+const createBaseZone = document.querySelector("[data-zone='create-base']");
+const createBasePreview = document.querySelector("#createBasePreview");
+const createGenerateBtn = document.querySelector("#createGenerate");
+const createResultsGrid = document.querySelector("#createResultsGrid");
+const createStatusLine = document.querySelector("#createStatus");
+const createStatusDetails = document.querySelector("#createStatusDetails");
+const createCountInputs = Array.from(
+  document.querySelectorAll("input[name='createCount']"),
+);
+const createRefToggle = document.querySelector("#createRefToggle");
+const createRefContainer = document.querySelector("#createRefContainer");
+const createMonthlyCostEl = document.querySelector("#createMonthlyCost");
+const quotaRemainingEl = document.querySelector("#quotaRemaining");
+const createQuotaRemainingEl = document.querySelector("#createQuotaRemaining");
+const settingDailyLimit = document.querySelector("#settingDailyLimit");
+const settingMonthlyBudget = document.querySelector("#settingMonthlyBudget");
+const saveSettingsBtn = document.querySelector("#saveSettingsBtn");
+const settingsStatus = document.querySelector("#settingsStatus");
+const budgetBarFill = document.querySelector("#budgetBarFill");
+const budgetBarLabel = document.querySelector("#budgetBarLabel");
 
 let baseImage = null;
 let inspirationImages = [];
@@ -78,17 +109,11 @@ let selectedResult = null;
 let supabaseClient = null;
 let currentSession = null;
 let currentProfile = null;
-let galleryImages = [];
-let galleryCursor = null;
-let galleryHasMore = true;
-let gallerySearchTerm = "";
-let gallerySortOrder = "recent";
 let activeView = "workspace";
-let projectToDelete = null;
-let currentProjectId = null;
-let autoSaveTimeout = null;
+let activeMode = "redesign";
+let createBaseImage = null;
+let createInspirationImages = [];
 let currentMonthlyCostEur = 0;
-const AUTO_SAVE_DELAY = 2000;
 
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -212,6 +237,146 @@ const setStatus = (message, type = "", details = []) => {
   });
 };
 
+const setCreateStatus = (message, type = "", details = []) => {
+  if (createStatusLine) {
+    createStatusLine.textContent = message;
+    createStatusLine.className = type ? `status-${type}` : "";
+  }
+  if (createStatusDetails) {
+    createStatusDetails.innerHTML = "";
+    if (details && details.length > 0) {
+      details.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "status-details-card";
+        card.textContent = item;
+        createStatusDetails.appendChild(card);
+      });
+    }
+  }
+};
+
+const renderCreateBasePreview = () => {
+  if (!createBasePreview) return;
+  createBasePreview.innerHTML = "";
+
+  if (!createBaseImage) {
+    const placeholder = document.createElement("p");
+    placeholder.textContent = "Aucune image importée.";
+    createBasePreview.appendChild(placeholder);
+    return;
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "preview-single-card";
+  const img = document.createElement("img");
+  img.src = createBaseImage.dataUrl;
+  img.alt = "Image de référence";
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "remove-btn";
+  removeBtn.textContent = "×";
+  removeBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    createBaseImage = null;
+    renderCreateBasePreview();
+  });
+
+  wrapper.appendChild(img);
+  wrapper.appendChild(removeBtn);
+  createBasePreview.appendChild(wrapper);
+};
+
+const renderCreateInspirationPreview = () => {
+  if (!createInspoPreview) return;
+  createInspoPreview.innerHTML = "";
+
+  if (createInspirationImages.length === 0) {
+    const placeholder = document.createElement("p");
+    placeholder.textContent = "Aucune inspiration ajoutée.";
+    createInspoPreview.appendChild(placeholder);
+    return;
+  }
+
+  createInspirationImages.forEach((image, index) => {
+    const card = document.createElement("div");
+    card.className = "preview-card";
+
+    const img = document.createElement("img");
+    img.src = image.dataUrl;
+    img.alt = `Inspiration ${index + 1}`;
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "remove-btn";
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      createInspirationImages.splice(index, 1);
+      renderCreateInspirationPreview();
+    });
+
+    card.appendChild(img);
+    card.appendChild(removeBtn);
+    createInspoPreview.appendChild(card);
+  });
+};
+
+const handleCreateBaseFiles = async (files) => {
+  const [file] = files;
+  if (!file) return;
+
+  const dataUrl = await fileToDataUrl(file);
+  let aspectRatio = null;
+
+  try {
+    const dimensions = await loadImageDimensions(dataUrl);
+    aspectRatio = pickAspectRatio(dimensions.width, dimensions.height);
+  } catch (error) {
+    setCreateStatus(
+      "Impossible de déterminer le ratio de l'image.",
+      "warn",
+    );
+  }
+
+  createBaseImage = {
+    name: file.name,
+    mimeType: file.type || "image/png",
+    dataUrl,
+    data: dataUrl.split(",")[1],
+    aspectRatio,
+  };
+  renderCreateBasePreview();
+};
+
+const handleCreateInspirationFiles = async (files) => {
+  const fileList = Array.from(files || []);
+  if (fileList.length === 0) return;
+
+  const availableSlots = Math.max(0, 4 - createInspirationImages.length);
+  const incomingFiles = fileList.slice(0, availableSlots);
+
+  if (incomingFiles.length < fileList.length) {
+    setCreateStatus("Limite de 4 inspirations atteinte.", "error");
+  }
+
+  for (const file of incomingFiles) {
+    const dataUrl = await fileToDataUrl(file);
+    const position = createInspirationImages.length;
+    const newImage = {
+      name: file.name,
+      mimeType: file.type || "image/png",
+      dataUrl,
+      data: dataUrl.split(",")[1],
+      position,
+    };
+
+    createInspirationImages.push(newImage);
+  }
+
+  renderCreateInspirationPreview();
+};
+
 const renderBasePreview = () => {
   basePreview.innerHTML = "";
 
@@ -265,12 +430,8 @@ const renderInspirationPreview = () => {
     removeBtn.type = "button";
     removeBtn.className = "remove-btn";
     removeBtn.textContent = "×";
-    removeBtn.addEventListener("click", async (event) => {
+    removeBtn.addEventListener("click", (event) => {
       event.stopPropagation();
-      // Delete from server if has ID
-      if (image.id && currentProjectId) {
-        await deleteInspirationFromProject(image.id);
-      }
       inspirationImages.splice(index, 1);
       renderInspirationPreview();
     });
@@ -306,11 +467,6 @@ const handleBaseFiles = async (files) => {
     aspectRatio,
   };
   renderBasePreview();
-
-  // Upload to project if one is selected
-  if (currentProjectId) {
-    await uploadBaseImageToProject();
-  }
 };
 
 const handleInspirationFiles = async (files) => {
@@ -334,14 +490,6 @@ const handleInspirationFiles = async (files) => {
       data: dataUrl.split(",")[1],
       position,
     };
-
-    // Upload to project if one is selected
-    if (currentProjectId) {
-      const savedInsp = await uploadInspirationToProject(newImage, position);
-      if (savedInsp) {
-        newImage.id = savedInsp.id;
-      }
-    }
 
     inspirationImages.push(newImage);
   }
@@ -371,20 +519,6 @@ const getImageSrc = (image) => {
   }
   if (image?.dataUrl) return image.dataUrl;
   return "";
-};
-
-// Delete image via API (defined early for use in result cards)
-const deleteImageAPI = async (imageId) => {
-  if (!currentSession || !imageId) return false;
-  try {
-    const response = await authorizedFetch(`/api/images/${imageId}`, {
-      method: "DELETE",
-    });
-    return response.ok;
-  } catch (error) {
-    console.error("Failed to delete image:", error);
-    return false;
-  }
 };
 
 // Download modal functions
@@ -436,16 +570,7 @@ const changePassword = async (newPassword) => {
 const downloadHighQuality = async (image) => {
   if (!currentSession) return;
 
-  // Need to hydrate image data first if not available
-  let imageData = image;
-  if (!imageData.data && imageData.id) {
-    try {
-      imageData = await hydrateImageData(image);
-    } catch (error) {
-      setStatus("Impossible de charger l'image.", "error");
-      return;
-    }
-  }
+  const imageData = image;
 
   if (!imageData.data) {
     setStatus("Données image manquantes.", "error");
@@ -459,7 +584,6 @@ const downloadHighQuality = async (image) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        projectId: currentProjectId,
         baseImage: {
           data: imageData.data,
           mimeType: imageData.mimeType || "image/png",
@@ -536,25 +660,8 @@ const createResultCard = (image, index) => {
   downloadBtn.textContent = "Télécharger";
   downloadBtn.addEventListener("click", () => downloadHighQuality(image));
 
-  const deleteBtn = document.createElement("button");
-  deleteBtn.type = "button";
-  deleteBtn.className = "btn btn-danger btn-sm";
-  deleteBtn.textContent = "Supprimer";
-  deleteBtn.addEventListener("click", async () => {
-    if (!image.id) {
-      // Image not yet saved, just remove from UI
-      card.remove();
-      return;
-    }
-    const success = await deleteImageAPI(image.id);
-    if (success) {
-      card.remove();
-    }
-  });
-
   actionGroup.appendChild(refineBtn);
   actionGroup.appendChild(downloadBtn);
-  actionGroup.appendChild(deleteBtn);
 
   actions.appendChild(label);
   actions.appendChild(actionGroup);
@@ -683,53 +790,202 @@ const loadAdminUsers = async () => {
   }
 };
 
+const modeLabels = { base: "Redesign", create: "Créer", refine: "Retouche" };
+const fmtCost = (v) => `$${v.toFixed(2)}`;
+
 const loadUsageStats = async () => {
   if (!currentProfile || currentProfile.role !== "admin") return;
   const period = usagePeriod?.value || "month";
+  const userId = usageUserFilter?.value || "";
+  const params = new URLSearchParams({ period });
+  if (userId) params.set("user_id", userId);
+
   try {
-    const response = await authorizedFetch(`/api/admin/usage?period=${period}`);
+    const response = await authorizedFetch(`/api/admin/usage?${params}`);
     const data = await response.json();
     if (!response.ok) throw new Error(data?.error || "Erreur chargement.");
+    const isFiltered = Boolean(data.filterUserId);
 
-    if (usageTotalCost)
-      usageTotalCost.textContent = `$${data.totalCost.toFixed(4)}`;
+    // Populate user filter dropdown (keep current selection)
+    if (usageUserFilter && data.allUsers) {
+      const prev = usageUserFilter.value;
+      usageUserFilter.innerHTML =
+        '<option value="">Tous les utilisateurs</option>';
+      data.allUsers.forEach((u) => {
+        const opt = document.createElement("option");
+        opt.value = u.userId;
+        opt.textContent = u.email;
+        usageUserFilter.appendChild(opt);
+      });
+      usageUserFilter.value = prev;
+    }
+
+    // KPI cards
+    if (usageTotalCost) usageTotalCost.textContent = fmtCost(data.totalCost);
+    if (usageTotalImages) usageTotalImages.textContent = data.totalOutputImages || 0;
     if (usageTotalCalls) usageTotalCalls.textContent = data.totalCalls;
-    if (usageTotalImages)
-      usageTotalImages.textContent = data.totalOutputImages || 0;
+    if (usageAvgDay) usageAvgDay.textContent = fmtCost(data.avgCostPerDay || 0);
     if (usageSuccessRate) {
-      const rate =
-        data.totalCalls > 0
-          ? Math.round((data.successfulCalls / data.totalCalls) * 100)
-          : 0;
+      const rate = data.totalCalls > 0
+        ? Math.round((data.successfulCalls / data.totalCalls) * 100)
+        : 0;
       usageSuccessRate.textContent = `${rate}%`;
     }
 
-    if (usagePerUser) {
-      usagePerUser.innerHTML = "";
-      (data.perUser || []).forEach((user) => {
-        const row = document.createElement("div");
-        row.className = "admin-user-row usage-user-row";
-        row.innerHTML = `
-          <span>${user.email}</span>
-          <span>${user.calls}</span>
-          <span>$${user.cost.toFixed(4)}</span>
+    // Budget bar (always global)
+    if (data.budgetStatus) {
+      const bs = data.budgetStatus;
+      if (budgetBarFill) {
+        budgetBarFill.style.width = `${Math.min(bs.percentUsed, 100)}%`;
+        budgetBarFill.className =
+          "budget-bar-fill" + (bs.percentUsed >= 80 ? " budget-bar--warn" : "");
+      }
+      if (budgetBarLabel) {
+        budgetBarLabel.textContent = `${bs.spentThisMonthUsd.toFixed(2)} $ / ${bs.monthlyBudgetUsd.toFixed(2)} $ (${bs.percentUsed.toFixed(1)}%)`;
+      }
+    }
+
+    // Mode breakdown
+    const modeContainer = document.querySelector("#usageModeBreakdown");
+    if (modeContainer && data.perMode) {
+      modeContainer.innerHTML = "";
+      const totalModeCost = data.perMode.reduce((s, e) => s + e.cost, 0) || 1;
+      data.perMode.forEach((entry) => {
+        const pct = Math.round((entry.cost / totalModeCost) * 100);
+        const item = document.createElement("div");
+        item.className = "dash-mode-item";
+        item.innerHTML = `
+          <div class="dash-mode-header">
+            <span class="dash-mode-name">${modeLabels[entry.mode] || entry.mode}</span>
+            <span class="dash-mode-stat">${fmtCost(entry.cost)}</span>
+          </div>
+          <div class="dash-mode-bar-track"><div class="dash-mode-bar-fill" style="width:${pct}%"></div></div>
+          <span class="dash-mode-detail">${entry.calls} appels</span>
         `;
-        usagePerUser.appendChild(row);
+        modeContainer.appendChild(item);
       });
     }
 
-    if (usageDaily) {
-      usageDaily.innerHTML = "";
-      (data.daily || []).forEach((day) => {
-        const row = document.createElement("div");
-        row.className = "admin-user-row usage-daily-row";
-        row.innerHTML = `
-          <span>${day.date}</span>
-          <span>${day.calls}</span>
-          <span>$${day.cost.toFixed(4)}</span>
+    // Daily activity chart (vertical bar chart using CSS)
+    if (usageDailyChart) {
+      usageDailyChart.innerHTML = "";
+      const days = (data.daily || []).slice().reverse().slice(-14); // last 14 days, chronological
+      if (days.length === 0) {
+        usageDailyChart.innerHTML = '<p class="dash-empty">Aucune activité sur cette période.</p>';
+      } else {
+        const maxCalls = Math.max(...days.map((d) => d.calls), 1);
+        const chart = document.createElement("div");
+        chart.className = "dash-bars";
+        days.forEach((day) => {
+          const barH = Math.max(Math.round((day.calls / maxCalls) * 100), 2);
+          const col = document.createElement("div");
+          col.className = "dash-bar-col";
+          col.innerHTML = `
+            <span class="dash-bar-value">${day.calls}</span>
+            <div class="dash-bar" style="height:${barH}%"></div>
+            <span class="dash-bar-label">${day.date.slice(5)}</span>
+          `;
+          col.title = `${day.date}\n${day.calls} appels · ${fmtCost(day.cost)}`;
+          chart.appendChild(col);
+        });
+        usageDailyChart.appendChild(chart);
+      }
+    }
+
+    // Detail table — adapts to filter context
+    if (usageDetailTable) {
+      usageDetailTable.innerHTML = "";
+
+      if (!isFiltered) {
+        // Global view: show per-user table
+        if (usageDetailTitle) usageDetailTitle.textContent = "Détail par utilisateur";
+        const header = document.createElement("div");
+        header.className = "dtable-row dtable-header";
+        header.innerHTML = `
+          <span>Utilisateur</span>
+          <span>Aujourd'hui</span>
+          <span>Limite</span>
+          <span>Images</span>
+          <span>Coût</span>
+          <span>Limite perso</span>
         `;
-        usageDaily.appendChild(row);
-      });
+        usageDetailTable.appendChild(header);
+
+        (data.perUser || []).forEach((user) => {
+          const pct = user.dailyLimit > 0
+            ? Math.round((user.usedToday / user.dailyLimit) * 100) : 0;
+          const barClass = pct >= 80 ? "quota-bar--danger" : pct >= 50 ? "quota-bar--warn" : "quota-bar--ok";
+
+          const row = document.createElement("div");
+          row.className = "dtable-row";
+          row.innerHTML = `
+            <span class="dtable-email" title="${user.email}">${user.email}</span>
+            <span class="quota-cell">
+              <span class="quota-text">${user.usedToday}/${user.dailyLimit}</span>
+              <span class="quota-bar-track"><span class="quota-bar-fill ${barClass}" style="width:${Math.min(pct, 100)}%"></span></span>
+            </span>
+            <span>${user.dailyLimit}/j</span>
+            <span>${user.images || user.calls}</span>
+            <span>${fmtCost(user.cost)}</span>
+            <span class="admin-actions">
+              <input type="number" class="limit-input" min="0" max="9999"
+                placeholder="Défaut" value="${user.dailyLimitOverride !== null ? user.dailyLimitOverride : ""}"
+                data-user-id="${user.userId}" title="Vide = limite par défaut" />
+              <button type="button" class="btn btn-outline btn-sm limit-save-btn" data-user-id="${user.userId}">OK</button>
+            </span>
+          `;
+          // Click row to filter by this user
+          const emailCell = row.querySelector(".dtable-email");
+          emailCell.style.cursor = "pointer";
+          emailCell.addEventListener("click", () => {
+            if (usageUserFilter) {
+              usageUserFilter.value = user.userId;
+              loadUsageStats();
+            }
+          });
+          usageDetailTable.appendChild(row);
+        });
+
+        // Bind limit save buttons
+        usageDetailTable.querySelectorAll(".limit-save-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const uid = btn.dataset.userId;
+            const input = usageDetailTable.querySelector(
+              `.limit-input[data-user-id="${uid}"]`,
+            );
+            setUserDailyLimit(uid, input?.value ?? "");
+          });
+        });
+      } else {
+        // User-filtered view: show daily breakdown for that user
+        const userName = data.perUser?.[0]?.email || "Utilisateur";
+        if (usageDetailTitle) usageDetailTitle.textContent = `Historique — ${userName}`;
+        const header = document.createElement("div");
+        header.className = "dtable-row dtable-header dtable-daily";
+        header.innerHTML = `
+          <span>Date</span>
+          <span>Images</span>
+          <span>Appels</span>
+          <span>Coût</span>
+          <span></span>
+        `;
+        usageDetailTable.appendChild(header);
+
+        const maxDayCost = Math.max(...(data.daily || []).map((d) => d.cost), 0.001);
+        (data.daily || []).forEach((day) => {
+          const barPct = Math.round((day.cost / maxDayCost) * 100);
+          const row = document.createElement("div");
+          row.className = "dtable-row dtable-daily";
+          row.innerHTML = `
+            <span>${day.date}</span>
+            <span>${day.images || 0}</span>
+            <span>${day.calls}</span>
+            <span>${fmtCost(day.cost)}</span>
+            <span class="history-bar-cell"><span class="history-bar" style="width:${barPct}%"></span></span>
+          `;
+          usageDetailTable.appendChild(row);
+        });
+      }
     }
   } catch (error) {
     console.error("Usage stats error:", error);
@@ -738,9 +994,9 @@ const loadUsageStats = async () => {
 
 const updateMonthlyCostDisplay = (eur) => {
   currentMonthlyCostEur = eur;
-  if (monthlyCostEl) {
-    monthlyCostEl.textContent = `${eur.toFixed(2).replace(".", ",")} \u20AC`;
-  }
+  const formatted = `${eur.toFixed(2).replace(".", ",")} \u20AC`;
+  if (monthlyCostEl) monthlyCostEl.textContent = formatted;
+  if (createMonthlyCostEl) createMonthlyCostEl.textContent = formatted;
 };
 
 const loadMonthlyCost = async () => {
@@ -756,503 +1012,125 @@ const loadMonthlyCost = async () => {
   }
 };
 
-// ============================================
-// PROJECT MANAGEMENT
-// ============================================
-
-// Helper to fetch image URL and convert to base64/dataUrl
-const fetchImageAsBase64 = async (url, mimeType) => {
-  if (!url) return null;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const blob = await response.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result;
-        resolve({
-          dataUrl,
-          data: dataUrl.split(",")[1],
-          mimeType: mimeType || blob.type || "image/png",
-        });
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch (e) {
-    return null;
-  }
-};
-
-// Render projects in sidebar
-const renderProjectList = (projects) => {
-  if (!projectList) return;
-  projectList.innerHTML = "";
-  projects.forEach((project, index) => {
-    const item = createProjectItem(project.id, project.name, index === 0);
-    projectList.appendChild(item);
-  });
-};
-
-// Load all projects for current user
-const loadProjects = async () => {
+const loadQuota = async () => {
   if (!currentSession) return;
   try {
-    const response = await authorizedFetch("/api/projects");
+    const response = await authorizedFetch("/api/quota");
     const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.error || "Impossible de charger les projets.");
-    }
-    const projects = data.projects || [];
-    renderProjectList(projects);
-
-    if (projects.length > 0) {
-      await loadProject(projects[0].id);
-    } else {
-      await createNewProjectAPI();
-    }
-  } catch (error) {
-    setStatus("Erreur lors du chargement des projets.", "error");
-  }
-};
-
-// Load a single project with all its data
-const loadProject = async (projectId) => {
-  if (!currentSession || !projectId) return;
-  try {
-    const response = await authorizedFetch(`/api/projects/${projectId}`);
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.error || "Impossible de charger le projet.");
-    }
-
-    currentProjectId = projectId;
-
-    // Restore base image
-    if (data.project.baseImageUrl) {
-      const imageData = await fetchImageAsBase64(
-        data.project.baseImageUrl,
-        data.project.baseMimeType,
-      );
-      if (imageData) {
-        try {
-          const dimensions = await loadImageDimensions(imageData.dataUrl);
-          imageData.aspectRatio = pickAspectRatio(
-            dimensions.width,
-            dimensions.height,
-          );
-        } catch (e) {
-          imageData.aspectRatio = null;
-        }
-        baseImage = imageData;
-      } else {
-        baseImage = null;
-      }
-    } else {
-      baseImage = null;
-    }
-
-    // Restore inspiration images
-    inspirationImages = [];
-    if (data.inspirations && data.inspirations.length > 0) {
-      for (const insp of data.inspirations) {
-        if (insp.url) {
-          const imageData = await fetchImageAsBase64(insp.url, insp.mimeType);
-          if (imageData) {
-            inspirationImages.push({
-              id: insp.id,
-              position: insp.position,
-              ...imageData,
-            });
-          }
-        }
-      }
-    }
-
-    // Restore prompt
-    promptField.value = data.project.prompt || "";
-
-    // Restore generated images
-    if (data.generatedImages && data.generatedImages.length > 0) {
-      renderResults(data.generatedImages);
-    } else {
-      resultsGrid.innerHTML = "";
-    }
-
-    // Update UI
-    renderBasePreview();
-    renderInspirationPreview();
-
-    // Update sidebar selection
-    if (projectList) {
-      const items = projectList.querySelectorAll(".project-item");
-      items.forEach((item) => {
-        item.classList.toggle(
-          "is-active",
-          item.dataset.projectId === projectId,
-        );
+    if (response.ok) {
+      const text = `${data.remaining}/${data.dailyLimit} restantes`;
+      [quotaRemainingEl, createQuotaRemainingEl].forEach((el) => {
+        if (!el) return;
+        el.textContent = text;
+        el.className =
+          "pill quota-pill" +
+          (data.remaining <= 0
+            ? " quota-exhausted"
+            : data.remaining <= 3
+              ? " quota-low"
+              : "");
       });
     }
-
-    setStatus("Projet chargé.", "ok");
-  } catch (error) {
-    setStatus("Erreur lors du chargement du projet.", "error");
+  } catch (err) {
+    console.error("Quota load error:", err);
   }
 };
 
-// Save current project state
-const saveCurrentProject = async () => {
-  if (!currentProjectId || !currentSession) return;
+const loadAdminSettings = async () => {
+  if (!currentProfile || currentProfile.role !== "admin") return;
   try {
-    const updates = {
-      prompt: promptField.value,
+    const response = await authorizedFetch("/api/admin/settings");
+    const data = await response.json();
+    if (response.ok && data.settings) {
+      if (settingDailyLimit)
+        settingDailyLimit.value = data.settings.default_daily_limit || "20";
+      if (settingMonthlyBudget)
+        settingMonthlyBudget.value = data.settings.monthly_budget_usd || "500";
+    }
+  } catch (err) {
+    console.error("Admin settings load error:", err);
+  }
+};
+
+const saveAdminSettings = async () => {
+  if (!currentProfile || currentProfile.role !== "admin") return;
+  try {
+    const payload = {
+      default_daily_limit: settingDailyLimit?.value || "20",
+      monthly_budget_usd: settingMonthlyBudget?.value || "500",
     };
-
-    await authorizedFetch(`/api/projects/${currentProjectId}`, {
+    const response = await authorizedFetch("/api/admin/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
+      body: JSON.stringify(payload),
     });
-  } catch (error) {
-    console.error("Auto-save failed:", error);
-  }
-};
-
-// Schedule auto-save with debounce
-const scheduleAutoSave = () => {
-  if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
-  autoSaveTimeout = setTimeout(saveCurrentProject, AUTO_SAVE_DELAY);
-};
-
-// Create a new project via API
-const createNewProjectAPI = async () => {
-  if (!currentSession) return null;
-  try {
-    const response = await authorizedFetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Nouveau projet" }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.error || "Impossible de créer le projet.");
-    }
-    return data.project;
-  } catch (error) {
-    setStatus("Impossible de créer le projet.", "error");
-    return null;
-  }
-};
-
-// Upload base image to current project
-const uploadBaseImageToProject = async () => {
-  if (!currentProjectId || !baseImage || !currentSession) return;
-  try {
-    await authorizedFetch(`/api/projects/${currentProjectId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        baseImage: {
-          data: baseImage.data,
-          mimeType: baseImage.mimeType,
-        },
-      }),
-    });
-  } catch (error) {
-    console.error("Failed to upload base image:", error);
-  }
-};
-
-// Upload inspiration to current project
-const uploadInspirationToProject = async (imageData, position) => {
-  if (!currentProjectId || !currentSession) return null;
-  try {
-    const response = await authorizedFetch(
-      `/api/projects/${currentProjectId}/inspirations`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image: {
-            data: imageData.data,
-            mimeType: imageData.mimeType,
-          },
-          position,
-        }),
-      },
-    );
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.error || "Impossible d'ajouter l'inspiration.");
-    }
-    return data.inspiration;
-  } catch (error) {
-    console.error("Failed to upload inspiration:", error);
-    return null;
-  }
-};
-
-// Delete inspiration from project
-const deleteInspirationFromProject = async (inspirationId) => {
-  if (!currentProjectId || !currentSession || !inspirationId) return;
-  try {
-    await authorizedFetch(
-      `/api/projects/${currentProjectId}/inspirations/${inspirationId}`,
-      {
-        method: "DELETE",
-      },
-    );
-  } catch (error) {
-    console.error("Failed to delete inspiration:", error);
-  }
-};
-
-// Delete project via API
-const deleteProjectAPI = async (projectId) => {
-  if (!currentSession || !projectId) return false;
-  try {
-    const response = await authorizedFetch(`/api/projects/${projectId}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) {
+    if (response.ok) {
+      if (settingsStatus) {
+        settingsStatus.textContent = "Paramètres enregistrés.";
+        settingsStatus.className = "note ok";
+        setTimeout(() => {
+          settingsStatus.textContent = "";
+          settingsStatus.className = "note";
+        }, 3000);
+      }
+      loadUsageStats();
+    } else {
       const data = await response.json();
-      throw new Error(data?.error || "Impossible de supprimer le projet.");
+      throw new Error(data?.error || "Erreur");
     }
-    return true;
-  } catch (error) {
-    setStatus("Impossible de supprimer le projet.", "error");
-    return false;
+  } catch (err) {
+    if (settingsStatus) {
+      settingsStatus.textContent = err.message || "Erreur de sauvegarde.";
+      settingsStatus.className = "note error";
+    }
   }
 };
 
-// Rename project via API
-const renameProjectAPI = async (projectId, newName) => {
-  if (!currentSession || !projectId) return false;
+const setUserDailyLimit = async (userId, limit) => {
   try {
-    const response = await authorizedFetch(`/api/projects/${projectId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName }),
+    await updateAdminUser(userId, {
+      daily_limit_override: limit === "" ? null : parseInt(limit),
     });
-    return response.ok;
-  } catch (error) {
-    console.error("Failed to rename project:", error);
-    return false;
+    loadUsageStats();
+  } catch (err) {
+    console.error("Set user limit error:", err);
   }
 };
+
+const isAdminView = (view) =>
+  view === "admin-users" || view === "admin-usage";
 
 const setActiveView = (view) => {
   const isAdmin = currentProfile?.role === "admin";
-  const nextView = view === "admin" && !isAdmin ? "workspace" : view;
+  const nextView = isAdminView(view) && !isAdmin ? "workspace" : view;
   activeView = nextView;
+
+  // Update active mode based on view
+  if (nextView === "workspace") activeMode = "redesign";
+  if (nextView === "create") activeMode = "create";
+
   appViews.forEach((panel) => {
     panel.classList.toggle("is-active", panel.dataset.view === nextView);
   });
   // Update nav buttons state
-  if (galleryBtn) {
-    galleryBtn.classList.toggle("is-active", nextView === "gallery");
+  if (adminUsersNavBtn) {
+    adminUsersNavBtn.classList.toggle("is-active", nextView === "admin-users");
   }
-  if (adminNavBtn) {
-    adminNavBtn.classList.toggle("is-active", nextView === "admin");
+  if (adminUsageNavBtn) {
+    adminUsageNavBtn.classList.toggle("is-active", nextView === "admin-usage");
   }
-  // Update project items - active only when in workspace
-  if (projectList) {
-    const items = projectList.querySelectorAll(".project-item");
-    items.forEach((item) => {
-      if (nextView !== "workspace") {
-        item.classList.remove("is-active");
-      }
-    });
+  if (redesignNavBtn) {
+    redesignNavBtn.classList.toggle("is-active", nextView === "workspace");
   }
-  // Load gallery data when switching to gallery view
-  if (nextView === "gallery" && galleryImages.length === 0) {
-    loadGallery({ reset: true });
+  if (createNavBtn) {
+    createNavBtn.classList.toggle("is-active", nextView === "create");
   }
-  if (nextView === "admin") {
+  if (nextView === "admin-users") {
     loadAdminUsers();
+  }
+  if (nextView === "admin-usage") {
     loadUsageStats();
-  }
-};
-
-// Gallery functions
-const formatDate = (dateString) => {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const createGalleryCard = (image) => {
-  const card = document.createElement("div");
-  card.className = "gallery-card";
-
-  const imageWrapper = document.createElement("div");
-  imageWrapper.className = "gallery-card-image";
-
-  const img = document.createElement("img");
-  img.src = getImageSrc(image);
-  img.alt = image.prompt || "Image générée";
-  img.loading = "lazy";
-
-  const overlay = document.createElement("div");
-  overlay.className = "gallery-card-overlay";
-
-  // Click on image wrapper opens preview (unless clicking on buttons)
-  imageWrapper.addEventListener("click", (e) => {
-    if (e.target.closest(".btn")) return;
-    openPreview(img.src);
-  });
-
-  const actions = document.createElement("div");
-  actions.className = "gallery-card-actions";
-
-  const downloadBtn = document.createElement("button");
-  downloadBtn.type = "button";
-  downloadBtn.className = "btn";
-  downloadBtn.textContent = "Télécharger";
-  downloadBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    downloadHighQuality(image);
-  });
-
-  const deleteBtn = document.createElement("button");
-  deleteBtn.type = "button";
-  deleteBtn.className = "btn btn-danger";
-  deleteBtn.textContent = "Supprimer";
-  deleteBtn.addEventListener("click", async (e) => {
-    e.stopPropagation();
-    if (!image.id) return;
-    const success = await deleteImageAPI(image.id);
-    if (success) {
-      // Remove from galleryImages array
-      const index = galleryImages.findIndex((img) => img.id === image.id);
-      if (index !== -1) {
-        galleryImages.splice(index, 1);
-      }
-      card.remove();
-      updateGalleryStats();
-    }
-  });
-
-  actions.appendChild(downloadBtn);
-  actions.appendChild(deleteBtn);
-  overlay.appendChild(actions);
-  imageWrapper.appendChild(img);
-  imageWrapper.appendChild(overlay);
-
-  const info = document.createElement("div");
-  info.className = "gallery-card-info";
-
-  const meta = document.createElement("div");
-  meta.className = "gallery-card-meta";
-
-  const dateSpan = document.createElement("span");
-  dateSpan.className = "gallery-card-date";
-  dateSpan.textContent = formatDate(image.created_at);
-
-  const modeSpan = document.createElement("span");
-  modeSpan.className = "gallery-card-mode";
-  modeSpan.textContent = image.mode === "refine" ? "Retouche" : "Génération";
-
-  meta.appendChild(dateSpan);
-  meta.appendChild(modeSpan);
-  info.appendChild(meta);
-
-  if (image.prompt) {
-    const promptP = document.createElement("p");
-    promptP.className = "gallery-card-prompt";
-    promptP.textContent = image.prompt;
-    promptP.title = image.prompt;
-    info.appendChild(promptP);
-  }
-
-  card.appendChild(imageWrapper);
-  card.appendChild(info);
-  return card;
-};
-
-const updateGalleryStats = () => {
-  if (totalImagesEl) {
-    totalImagesEl.textContent = galleryImages.length;
-  }
-};
-
-const renderGallery = () => {
-  if (!galleryGrid) return;
-  galleryGrid.innerHTML = "";
-
-  let filteredImages = [...galleryImages];
-
-  // Filter by search term
-  if (gallerySearchTerm) {
-    const term = gallerySearchTerm.toLowerCase();
-    filteredImages = filteredImages.filter(
-      (img) =>
-        (img.prompt && img.prompt.toLowerCase().includes(term)) ||
-        (img.mode && img.mode.toLowerCase().includes(term)),
-    );
-  }
-
-  // Sort images
-  filteredImages.sort((a, b) => {
-    const dateA = new Date(a.created_at || 0);
-    const dateB = new Date(b.created_at || 0);
-    return gallerySortOrder === "recent" ? dateB - dateA : dateA - dateB;
-  });
-
-  if (filteredImages.length === 0) {
-    if (galleryEmpty) galleryEmpty.style.display = "flex";
-    if (galleryLoadMore) galleryLoadMore.hidden = true;
-    updateGalleryStats();
-    return;
-  }
-
-  if (galleryEmpty) galleryEmpty.style.display = "none";
-
-  filteredImages.forEach((image) => {
-    galleryGrid.appendChild(createGalleryCard(image));
-  });
-
-  if (galleryLoadMore) {
-    galleryLoadMore.hidden = !galleryHasMore;
-  }
-
-  updateGalleryStats();
-};
-
-const loadGallery = async ({ reset = false } = {}) => {
-  if (!currentSession) return;
-  if (reset) {
-    galleryImages = [];
-    galleryCursor = null;
-    galleryHasMore = true;
-  }
-  if (!galleryHasMore) return;
-  if (galleryLoadMore) galleryLoadMore.disabled = true;
-
-  try {
-    const params = new URLSearchParams({ limit: "24" });
-    if (galleryCursor) params.append("cursor", galleryCursor);
-    const response = await authorizedFetch(`/api/library?${params.toString()}`);
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.error || "Chargement impossible.");
-    }
-    const items = Array.isArray(data?.items) ? data.items : [];
-    galleryImages = reset ? items : [...galleryImages, ...items];
-    galleryCursor = data?.nextCursor || null;
-    galleryHasMore = Boolean(data?.nextCursor);
-    renderGallery();
-  } catch (error) {
-    console.error("Erreur chargement galerie:", error);
-  } finally {
-    if (galleryLoadMore) galleryLoadMore.disabled = false;
+    loadAdminSettings();
   }
 };
 
@@ -1296,33 +1174,8 @@ const closePreview = () => {
   previewImage.src = "";
 };
 
-const hydrateImageData = async (image) => {
-  if (image?.data && image?.mimeType) return image;
-  if (!image?.id) return image;
-  try {
-    setStatus("Chargement de l'image...", "");
-    const response = await authorizedFetch(`/api/images/${image.id}`);
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.error || "Impossible de charger l'image.");
-    }
-    return {
-      ...image,
-      data: data.data,
-      mimeType: data.mimeType || "image/png",
-    };
-  } catch (error) {
-    setStatus(error.message || "Impossible de charger l'image.", "error");
-    throw error;
-  }
-};
-
 const openRefineModal = async (image) => {
-  try {
-    selectedResult = await hydrateImageData({ ...image });
-  } catch (error) {
-    return;
-  }
+  selectedResult = { ...image };
   refineImage.src = getResultDataUrl(selectedResult);
   refinePrompt.value = "";
 
@@ -1374,9 +1227,6 @@ document.addEventListener("keydown", (event) => {
   if (refineModal.classList.contains("is-open")) {
     closeRefineModal();
   }
-  if (deleteProjectModal && deleteProjectModal.classList.contains("is-open")) {
-    closeDeleteModal();
-  }
 });
 
 const generateImages = async () => {
@@ -1402,7 +1252,6 @@ const generateImages = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        projectId: currentProjectId,
         baseImage: {
           data: baseImage.data,
           mimeType: baseImage.mimeType,
@@ -1422,6 +1271,17 @@ const generateImages = async () => {
     });
 
     const data = await response.json();
+
+    if (response.status === 429) {
+      clearLoading(loadingCards);
+      resultsGrid.innerHTML = "";
+      loadQuota();
+      setStatus(
+        data?.error || "Limite quotidienne atteinte.",
+        "quota",
+      );
+      return;
+    }
 
     if (!response.ok) {
       const details = [];
@@ -1448,7 +1308,22 @@ const generateImages = async () => {
     }
 
     if (!data.images || data.images.length === 0) {
-      setStatus("Aucune image générée.", "error");
+      const details = Array.isArray(data?.errors)
+        ? data.errors
+            .map((error) => {
+              const parts = [];
+              if (error?.message) parts.push(error.message);
+              if (error?.status) parts.push(`status ${error.status}`);
+              if (error?.code) parts.push(error.code);
+              return parts.join(" · ");
+            })
+            .filter(Boolean)
+        : [];
+      setStatus(
+        "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
+        "error",
+        details,
+      );
       clearLoading(loadingCards);
       resultsGrid.innerHTML = "";
       return;
@@ -1459,11 +1334,9 @@ const generateImages = async () => {
     if (data.estimatedCostEur) {
       updateMonthlyCostDisplay(currentMonthlyCostEur + data.estimatedCostEur);
     }
+    loadQuota();
     const message = `Génération terminée avec ${data.images.length} image(s).`;
     const warnings = Array.isArray(data?.warnings) ? [...data.warnings] : [];
-    if (Array.isArray(data?.storageErrors)) {
-      data.storageErrors.forEach((detail) => warnings.push(detail));
-    }
     if (Array.isArray(data?.errors)) {
       data.errors.forEach((error) => {
         const parts = [];
@@ -1509,7 +1382,6 @@ const generateRefine = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        projectId: currentProjectId,
         baseImage: {
           data: selectedResult.data,
           mimeType: selectedResult.mimeType,
@@ -1526,6 +1398,16 @@ const generateRefine = async () => {
     });
 
     const data = await response.json();
+
+    if (response.status === 429) {
+      clearLoading(loadingCards);
+      loadQuota();
+      setStatus(
+        data?.error || "Limite quotidienne atteinte.",
+        "quota",
+      );
+      return;
+    }
 
     if (!response.ok) {
       const details = [];
@@ -1551,7 +1433,22 @@ const generateRefine = async () => {
     }
 
     if (!data.images || data.images.length === 0) {
-      setStatus("Aucune image générée.", "error");
+      const details = Array.isArray(data?.errors)
+        ? data.errors
+            .map((error) => {
+              const parts = [];
+              if (error?.message) parts.push(error.message);
+              if (error?.status) parts.push(`status ${error.status}`);
+              if (error?.code) parts.push(error.code);
+              return parts.join(" · ");
+            })
+            .filter(Boolean)
+        : [];
+      setStatus(
+        "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
+        "error",
+        details,
+      );
       clearLoading(loadingCards);
       return;
     }
@@ -1561,11 +1458,10 @@ const generateRefine = async () => {
     if (data.estimatedCostEur) {
       updateMonthlyCostDisplay(currentMonthlyCostEur + data.estimatedCostEur);
     }
+    loadQuota();
     const message = "Modification terminée.";
     const warnings = Array.isArray(data?.warnings) ? [...data.warnings] : [];
-    if (Array.isArray(data?.storageErrors)) {
-      data.storageErrors.forEach((detail) => warnings.push(detail));
-    }
+
     if (Array.isArray(data?.errors)) {
       data.errors.forEach((error) => {
         const parts = [];
@@ -1589,17 +1485,203 @@ const generateRefine = async () => {
   }
 };
 
+const generateCreate = async () => {
+  const promptText = createPromptField?.value?.trim() || "";
+  if (!promptText) {
+    setCreateStatus(
+      "Le prompt est obligatoire pour créer un visuel.",
+      "error",
+    );
+    return;
+  }
+
+  const selectedCount = Number.parseInt(
+    createCountInputs.find((input) => input.checked)?.value || "2",
+    10,
+  );
+
+  setCreateStatus("Génération en cours...", "");
+  if (createResultsGrid) createResultsGrid.classList.add("loading-grid");
+  const loadingCards = [];
+  if (createResultsGrid) {
+    createResultsGrid.innerHTML = "";
+    for (let i = 0; i < (selectedCount || 1); i += 1) {
+      const card = document.createElement("div");
+      card.className = "result-card loading";
+      const placeholder = document.createElement("div");
+      placeholder.className = "placeholder";
+      card.appendChild(placeholder);
+      createResultsGrid.appendChild(card);
+      loadingCards.push(card);
+    }
+  }
+  if (createGenerateBtn) {
+    createGenerateBtn.disabled = true;
+    createGenerateBtn.textContent = "Génération...";
+  }
+
+  try {
+    const body = {
+      inspirationImages: createInspirationImages.map((image) => ({
+        data: image.data,
+        mimeType: image.mimeType,
+      })),
+      prompt: promptText,
+      numImages: selectedCount,
+      imageConfig: {
+        imageSize: "1K",
+      },
+      mode: "create",
+    };
+
+    if (createBaseImage) {
+      body.baseImage = {
+        data: createBaseImage.data,
+        mimeType: createBaseImage.mimeType,
+      };
+      if (createBaseImage.aspectRatio) {
+        body.imageConfig.aspectRatio = createBaseImage.aspectRatio;
+      }
+    }
+
+    const response = await authorizedFetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    if (response.status === 429) {
+      loadingCards.forEach((c) => c.remove());
+      if (createResultsGrid) {
+        createResultsGrid.classList.remove("loading-grid");
+        createResultsGrid.innerHTML = "";
+      }
+      loadQuota();
+      setCreateStatus(
+        data?.error || "Limite quotidienne atteinte.",
+        "quota",
+      );
+      return;
+    }
+
+    if (!response.ok) {
+      const details = [];
+      if (Array.isArray(data?.errors)) {
+        data.errors.forEach((error) => {
+          const parts = [];
+          if (error?.message) parts.push(error.message);
+          if (error?.status) parts.push(`status ${error.status}`);
+          if (error?.code) parts.push(error.code);
+          if (parts.length > 0) details.push(parts.join(" · "));
+        });
+      }
+      if (Array.isArray(data?.details)) {
+        data.details.forEach((detail) => details.push(detail));
+      }
+      setCreateStatus(
+        data?.error || "Erreur lors de la génération.",
+        "error",
+        details,
+      );
+      loadingCards.forEach((c) => c.remove());
+      if (createResultsGrid) {
+        createResultsGrid.classList.remove("loading-grid");
+        createResultsGrid.innerHTML = "";
+      }
+      return;
+    }
+
+    if (!data.images || data.images.length === 0) {
+      const details = Array.isArray(data?.errors)
+        ? data.errors
+            .map((error) => {
+              const parts = [];
+              if (error?.message) parts.push(error.message);
+              if (error?.status) parts.push(`status ${error.status}`);
+              if (error?.code) parts.push(error.code);
+              return parts.join(" · ");
+            })
+            .filter(Boolean)
+        : [];
+      setCreateStatus(
+        "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
+        "error",
+        details,
+      );
+      loadingCards.forEach((c) => c.remove());
+      if (createResultsGrid) {
+        createResultsGrid.classList.remove("loading-grid");
+        createResultsGrid.innerHTML = "";
+      }
+      return;
+    }
+
+    loadingCards.forEach((c) => c.remove());
+    if (createResultsGrid) {
+      createResultsGrid.classList.remove("loading-grid");
+      createResultsGrid.innerHTML = "";
+      data.images.forEach((image, index) => {
+        createResultsGrid.appendChild(createResultCard(image, index));
+      });
+    }
+    if (data.estimatedCostEur) {
+      updateMonthlyCostDisplay(currentMonthlyCostEur + data.estimatedCostEur);
+    }
+    loadQuota();
+    const message = `Génération terminée avec ${data.images.length} image(s).`;
+    const warnings = Array.isArray(data?.warnings) ? [...data.warnings] : [];
+
+    if (Array.isArray(data?.errors)) {
+      data.errors.forEach((error) => {
+        const parts = [];
+        if (error?.message) parts.push(error.message);
+        if (error?.status) parts.push(`status ${error.status}`);
+        if (error?.code) parts.push(error.code);
+        if (parts.length > 0) warnings.push(parts.join(" · "));
+      });
+    }
+    const type = warnings.length > 0 ? "warn" : "ok";
+    setCreateStatus(message, type, warnings);
+  } catch (error) {
+    loadingCards.forEach((c) => c.remove());
+    if (createResultsGrid) {
+      createResultsGrid.classList.remove("loading-grid");
+      createResultsGrid.innerHTML = "";
+    }
+    setCreateStatus("Erreur réseau pendant la génération.", "error", [
+      error?.message || "Réseau indisponible.",
+    ]);
+  } finally {
+    if (createGenerateBtn) {
+      createGenerateBtn.disabled = false;
+      createGenerateBtn.textContent = "Générer";
+    }
+  }
+};
+
 setupDropzone(baseZone, baseInput, handleBaseFiles);
 setupDropzone(inspoZone, inspoInput, handleInspirationFiles);
 
+// Create mode dropzones
+if (createInspoZone && createInspoInput) {
+  setupDropzone(createInspoZone, createInspoInput, handleCreateInspirationFiles);
+}
+if (createBaseZone && createBaseInput) {
+  setupDropzone(createBaseZone, createBaseInput, handleCreateBaseFiles);
+}
+
 generateBtn.addEventListener("click", generateImages);
 refineGenerate.addEventListener("click", generateRefine);
-
-// Auto-save prompt on input
-promptField.addEventListener("input", scheduleAutoSave);
+if (createGenerateBtn) {
+  createGenerateBtn.addEventListener("click", generateCreate);
+}
 
 renderBasePreview();
 renderInspirationPreview();
+renderCreateBasePreview();
+renderCreateInspirationPreview();
 
 if (navToggle && navRail && navDrawer) {
   navToggle.addEventListener("click", () => {
@@ -1609,268 +1691,29 @@ if (navToggle && navRail && navDrawer) {
   });
 }
 
-// Project list management
-const selectProject = async (projectItem) => {
-  if (!projectList) return;
-  const projectId = projectItem.dataset.projectId;
-  if (!projectId) return;
-
-  // Save current project first
-  await saveCurrentProject();
-
-  // Update UI immediately
-  const allItems = projectList.querySelectorAll(".project-item");
-  allItems.forEach((item) => item.classList.remove("is-active"));
-  projectItem.classList.add("is-active");
-
-  // Load the project data
-  await loadProject(projectId);
-
-  // Switch to workspace view
-  setActiveView("workspace");
-};
-
-const startRenameProject = (projectItem) => {
-  const nameSpan = projectItem.querySelector(".project-name");
-  if (!nameSpan) return;
-
-  const projectId = projectItem.dataset.projectId;
-  const currentName = nameSpan.textContent;
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "project-name-input";
-  input.value = currentName;
-
-  nameSpan.replaceWith(input);
-  input.focus();
-  input.select();
-
-  const finishRename = async () => {
-    const newName = input.value.trim() || currentName;
-    const newSpan = document.createElement("span");
-    newSpan.className = "project-name";
-    newSpan.textContent = newName;
-    input.replaceWith(newSpan);
-
-    // Save to API if name changed
-    if (newName !== currentName && projectId) {
-      await renameProjectAPI(projectId, newName);
-    }
-  };
-
-  input.addEventListener("blur", finishRename);
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      input.blur();
-    }
-    if (event.key === "Escape") {
-      input.value = currentName;
-      input.blur();
-    }
-  });
-};
-
-const createProjectItem = (id, name, isActive = false) => {
-  const item = document.createElement("div");
-  item.className = `project-item${isActive ? " is-active" : ""}`;
-  item.dataset.projectId = id;
-
-  item.innerHTML = `
-    <svg class="project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-    </svg>
-    <span class="project-name">${name}</span>
-    <div class="project-actions">
-      <button class="project-edit-btn" type="button" title="Renommer">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-        </svg>
-      </button>
-      <button class="project-delete-btn" type="button" title="Supprimer">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-          <line x1="10" y1="11" x2="10" y2="17"/>
-          <line x1="14" y1="11" x2="14" y2="17"/>
-        </svg>
-      </button>
-    </div>
-  `;
-
-  return item;
-};
-
-// Delete project modal functions
-const openDeleteModal = (projectItem) => {
-  if (!deleteProjectModal) return;
-  projectToDelete = projectItem;
-  const projectName =
-    projectItem.querySelector(".project-name")?.textContent || "Ce projet";
-  if (deleteProjectNameEl) {
-    deleteProjectNameEl.textContent = projectName;
-  }
-  deleteProjectModal.classList.add("is-open");
-  deleteProjectModal.setAttribute("aria-hidden", "false");
-};
-
-const closeDeleteModal = () => {
-  if (!deleteProjectModal) return;
-  deleteProjectModal.classList.remove("is-open");
-  deleteProjectModal.setAttribute("aria-hidden", "true");
-  projectToDelete = null;
-};
-
-const deleteProject = async () => {
-  if (!projectToDelete) return;
-
-  const projectId = projectToDelete.dataset.projectId;
-  const wasActive = projectToDelete.classList.contains("is-active");
-
-  // Delete from API
-  const success = await deleteProjectAPI(projectId);
-  if (!success) {
-    closeDeleteModal();
-    return;
-  }
-
-  projectToDelete.remove();
-
-  // If the deleted project was active, select another one or create new
-  if (wasActive && projectList) {
-    const remainingProjects = projectList.querySelectorAll(".project-item");
-    if (remainingProjects.length > 0) {
-      await selectProject(remainingProjects[0]);
-    } else {
-      // Create a new project
-      const newProject = await createNewProjectAPI();
-      if (newProject) {
-        const newItem = createProjectItem(newProject.id, newProject.name, true);
-        projectList.appendChild(newItem);
-        currentProjectId = newProject.id;
-        baseImage = null;
-        inspirationImages = [];
-        promptField.value = "";
-        resultsGrid.innerHTML = "";
-        renderBasePreview();
-        renderInspirationPreview();
-        setActiveView("workspace");
-      } else {
-        setActiveView("gallery");
-      }
-    }
-  }
-
-  closeDeleteModal();
-};
-
-// Setup project list event delegation
-if (projectList) {
-  projectList.addEventListener("click", (event) => {
-    const editBtn = event.target.closest(".project-edit-btn");
-    const deleteBtn = event.target.closest(".project-delete-btn");
-    const projectItem = event.target.closest(".project-item");
-
-    if (deleteBtn && projectItem) {
-      event.stopPropagation();
-      openDeleteModal(projectItem);
-      return;
-    }
-
-    if (editBtn && projectItem) {
-      event.stopPropagation();
-      startRenameProject(projectItem);
-      return;
-    }
-
-    if (projectItem) {
-      selectProject(projectItem);
-    }
-  });
-}
-
-// New project button
-if (newProjectBtn && projectList) {
-  newProjectBtn.addEventListener("click", async () => {
-    // Save current project first
-    await saveCurrentProject();
-
-    // Create new project via API
-    const newProject = await createNewProjectAPI();
-    if (!newProject) return;
-
-    // Deselect all others
-    const existingItems = projectList.querySelectorAll(".project-item");
-    existingItems.forEach((item) => item.classList.remove("is-active"));
-
-    // Add new project to sidebar
-    const newItem = createProjectItem(newProject.id, newProject.name, true);
-    projectList.appendChild(newItem);
-
-    // Reset workspace state
-    currentProjectId = newProject.id;
-    baseImage = null;
-    inspirationImages = [];
-    promptField.value = "";
-    resultsGrid.innerHTML = "";
-
-    renderBasePreview();
-    renderInspirationPreview();
+// Mode nav buttons
+if (redesignNavBtn) {
+  redesignNavBtn.addEventListener("click", () => {
     setActiveView("workspace");
-
-    // Start rename immediately
-    setTimeout(() => startRenameProject(newItem), 50);
   });
 }
 
-// Gallery button
-if (galleryBtn) {
-  galleryBtn.addEventListener("click", () => {
-    setActiveView("gallery");
+if (createNavBtn) {
+  createNavBtn.addEventListener("click", () => {
+    setActiveView("create");
   });
 }
 
-// Admin button
-if (adminNavBtn) {
-  adminNavBtn.addEventListener("click", () => {
-    setActiveView("admin");
+// Admin buttons
+if (adminUsersNavBtn) {
+  adminUsersNavBtn.addEventListener("click", () => {
+    setActiveView("admin-users");
   });
 }
-
-// Gallery event listeners
-if (galleryLoadMore) {
-  galleryLoadMore.addEventListener("click", () => loadGallery());
-}
-
-if (gallerySearch) {
-  let searchTimeout;
-  gallerySearch.addEventListener("input", (event) => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => {
-      gallerySearchTerm = event.target.value;
-      renderGallery();
-    }, 300);
+if (adminUsageNavBtn) {
+  adminUsageNavBtn.addEventListener("click", () => {
+    setActiveView("admin-usage");
   });
-}
-
-if (gallerySort) {
-  gallerySort.addEventListener("change", (event) => {
-    gallerySortOrder = event.target.value;
-    renderGallery();
-  });
-}
-
-// Delete modal event listeners
-if (deleteProjectModal) {
-  deleteProjectModal.addEventListener("click", (event) => {
-    if (event.target.hasAttribute("data-delete-close")) {
-      closeDeleteModal();
-    }
-  });
-}
-
-if (confirmDeleteProjectBtn) {
-  confirmDeleteProjectBtn.addEventListener("click", deleteProject);
 }
 
 if (loginForm) {
@@ -2002,22 +1845,26 @@ if (adminCreateForm) {
 if (usagePeriod) {
   usagePeriod.addEventListener("change", loadUsageStats);
 }
+if (usageUserFilter) {
+  usageUserFilter.addEventListener("change", loadUsageStats);
+}
 if (usageRefresh) {
   usageRefresh.addEventListener("click", loadUsageStats);
+}
+if (saveSettingsBtn) {
+  saveSettingsBtn.addEventListener("click", () => {
+    saveAdminSettings();
+  });
 }
 
 const handleSession = async (session) => {
   currentSession = session;
   if (!session) {
     currentProfile = null;
-    currentProjectId = null;
     baseImage = null;
     inspirationImages = [];
     if (resultsGrid) {
       resultsGrid.innerHTML = "";
-    }
-    if (projectList) {
-      projectList.innerHTML = "";
     }
     setActiveView("workspace");
     setViewState(false);
@@ -2035,20 +1882,16 @@ const handleSession = async (session) => {
   if (userRole) {
     userRole.textContent = currentProfile.role === "admin" ? "Admin" : "Member";
   }
-  if (adminPanel) {
-    adminPanel.hidden = currentProfile.role !== "admin";
+  if (adminNavGroup) {
+    adminNavGroup.hidden = currentProfile.role !== "admin";
   }
-  if (usagePanel) {
-    usagePanel.hidden = currentProfile.role !== "admin";
-  }
-  if (adminNavBtn) {
-    adminNavBtn.hidden = currentProfile.role !== "admin";
+  // If currently on an admin view but no longer admin, redirect
+  if (isAdminView(activeView) && currentProfile.role !== "admin") {
+    activeView = "workspace";
   }
   setActiveView(activeView);
-  await loadProjects();
-  await loadAdminUsers();
-  await loadUsageStats();
   await loadMonthlyCost();
+  await loadQuota();
 };
 
 const bootstrap = async () => {

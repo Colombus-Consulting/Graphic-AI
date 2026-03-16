@@ -77,13 +77,43 @@
                     </svg>
                 </button>
                 <div id="navDrawer" class="nav-drawer" aria-hidden="true">
-                    <!-- Admin button at top (hidden for non-admins) -->
+                    <!-- Admin buttons (hidden for non-admins) -->
+                    <div id="adminNavGroup" class="nav-admin-group" hidden>
+                        <button
+                            id="adminUsersNavBtn"
+                            class="nav-admin-btn"
+                            type="button"
+                            data-view-target="admin-users"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                            <span>Utilisateurs</span>
+                        </button>
+                        <button
+                            id="adminUsageNavBtn"
+                            class="nav-admin-btn"
+                            type="button"
+                            data-view-target="admin-usage"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="20" x2="12" y2="10"/>
+                                <line x1="18" y1="20" x2="18" y2="4"/>
+                                <line x1="6" y1="20" x2="6" y2="16"/>
+                            </svg>
+                            <span>Utilisation</span>
+                        </button>
+                    </div>
+
+                    <!-- Mode buttons -->
                     <button
-                        id="adminNavBtn"
-                        class="nav-admin-btn"
+                        id="redesignNavBtn"
+                        class="nav-mode-btn is-active"
                         type="button"
-                        data-view-target="admin"
-                        hidden
+                        data-view-target="workspace"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -93,19 +123,17 @@
                             stroke-linecap="round"
                             stroke-linejoin="round"
                         >
-                            <circle cx="12" cy="12" r="3" />
                             <path
-                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                                d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"
                             />
                         </svg>
-                        <span>Administration</span>
+                        <span>Redesign</span>
                     </button>
-
-                    <!-- Gallery button -->
                     <button
-                        class="nav-gallery-btn"
+                        id="createNavBtn"
+                        class="nav-mode-btn"
                         type="button"
-                        data-view-target="gallery"
+                        data-view-target="create"
                     >
                         <svg
                             viewBox="0 0 24 24"
@@ -115,43 +143,12 @@
                             stroke-linecap="round"
                             stroke-linejoin="round"
                         >
-                            <rect x="3" y="3" width="7" height="7" rx="1" />
-                            <rect x="14" y="3" width="7" height="7" rx="1" />
-                            <rect x="3" y="14" width="7" height="7" rx="1" />
-                            <rect x="14" y="14" width="7" height="7" rx="1" />
+                            <polygon
+                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+                            />
                         </svg>
-                        <span>Galerie</span>
+                        <span>Cr&eacute;er</span>
                     </button>
-
-                    <div class="nav-divider"></div>
-
-                    <!-- Projects section -->
-                    <div class="nav-projects-section">
-                        <div class="nav-projects-header">
-                            <h4>Projets</h4>
-                            <button
-                                id="newProjectBtn"
-                                class="btn-icon"
-                                type="button"
-                                title="Nouveau projet"
-                            >
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                >
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div id="projectList" class="project-list" role="list">
-                            <!-- Projets chargés dynamiquement -->
-                        </div>
-                    </div>
 
                     <!-- User section at bottom -->
                     <div class="nav-user-section">
@@ -180,63 +177,42 @@
             <main class="app-shell">
                 <div class="app-views">
                     <section class="app-view is-active" data-view="workspace">
-                        <section class="hero card hero-wide">
-                            <div class="hero-copy">
-                                <h1>
-                                    Des variantes graphiques alignées avec votre
-                                    charte, en quelques minutes.
-                                </h1>
-                                <p class="subtitle">
-                                    Importez un graphique, ajoutez des
-                                    inspirations et orientez l'IA pour produire
-                                    des variantes professionnelles prêtes à
-                                    livrer.
-                                </p>
-                                <div
-                                    class="hero-metrics"
-                                    aria-label="Informations clés"
-                                >
-                                    <div class="metric">
-                                        <span class="metric-value">~1 min</span>
-                                        <span class="metric-label"
-                                            >Temps moyen</span
-                                        >
-                                    </div>
-                                    <span
-                                        class="metric-divider"
-                                        aria-hidden="true"
-                                    ></span>
-                                    <div class="metric">
-                                        <span class="metric-value"
-                                            >~0,15 €</span
-                                        >
-                                        <span class="metric-label"
-                                            >Cout moyen / image</span
-                                        >
-                                    </div>
-                                    <span
-                                        class="metric-divider"
-                                        aria-hidden="true"
-                                    ></span>
-                                    <div class="metric">
-                                        <span
-                                            id="monthlyCost"
-                                            class="metric-value"
-                                            >--</span
-                                        >
-                                        <span class="metric-label"
-                                            >Ce mois-ci</span
-                                        >
-                                    </div>
+                        <header class="view-banner">
+                            <div class="banner-title">
+                                <h1>Redesign</h1>
+                                <p class="subtitle">Importez, inspirez, g&eacute;n&eacute;rez.</p>
+                            </div>
+                            <div class="banner-metrics" aria-label="Informations cl&eacute;s">
+                                <span class="pill">~1 min</span>
+                                <span class="pill">~0,15 &euro;/img</span>
+                                <span class="pill" id="monthlyCost">--</span>
+                                <span class="pill quota-pill" id="quotaRemaining" title="G&eacute;n&eacute;rations restantes aujourd'hui">--</span>
+                            </div>
+                        </header>
+
+                        <section class="showcase-section" id="redesignShowcase" hidden>
+                            <h3>Exemples</h3>
+                            <div class="showcase-grid">
+                                <div class="showcase-card showcase-before-after">
+                                    <div class="showcase-placeholder"></div>
+                                    <svg class="showcase-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                                    <div class="showcase-placeholder"></div>
+                                    <p>Exemple : graphique basique &rarr; infographie professionnelle</p>
+                                </div>
+                                <div class="showcase-card showcase-before-after">
+                                    <div class="showcase-placeholder"></div>
+                                    <svg class="showcase-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                                    <div class="showcase-placeholder"></div>
+                                    <p>Exemple : camembert Excel &rarr; donut chart align&eacute; charte</p>
                                 </div>
                             </div>
                         </section>
 
-                        <section class="inputs-row">
+                        <section class="inputs-duo">
                             <article class="card">
                                 <div class="card-header">
                                     <h2>Graphique source</h2>
-                                    <p>Importe le visuel à améliorer.</p>
+                                    <p>Le visuel &agrave; am&eacute;liorer.</p>
                                 </div>
                                 <div class="dropzone" data-zone="base">
                                     <input
@@ -246,7 +222,7 @@
                                         hidden
                                     />
                                     <div class="dropzone-content">
-                                        <p>Glissez-déposez votre graphique</p>
+                                        <p>Glissez-d&eacute;posez votre graphique</p>
                                         <span>ou cliquez pour importer</span>
                                     </div>
                                     <div
@@ -259,7 +235,7 @@
                             <article class="card">
                                 <div class="card-header">
                                     <h2>Inspirations</h2>
-                                    <p>Jusqu'à 4 références de style.</p>
+                                    <p>Jusqu'&agrave; 4 r&eacute;f&eacute;rences de style.</p>
                                 </div>
                                 <div class="dropzone" data-zone="inspo">
                                     <input
@@ -270,11 +246,8 @@
                                         hidden
                                     />
                                     <div class="dropzone-content">
-                                        <p>Ajoutez des références visuelles</p>
-                                        <span
-                                            >styles, palettes, layouts,
-                                            typographies</span
-                                        >
+                                        <p>Ajoutez des r&eacute;f&eacute;rences visuelles</p>
+                                        <span>styles, palettes, layouts, typographies</span>
                                     </div>
                                     <div
                                         id="inspoPreview"
@@ -282,383 +255,326 @@
                                     ></div>
                                 </div>
                             </article>
-
-                            <article class="card">
-                                <div class="card-header">
-                                    <h2>Prompt</h2>
-                                    <p>
-                                        Décris le style, la hiérarchie, les
-                                        couleurs.
-                                    </p>
-                                </div>
-                                <textarea
-                                    id="prompt"
-                                    class="prompt-area"
-                                    placeholder="Ex: style minimal, palette bleu nuit, forte hiérarchie typographique..."
-                                    rows="6"
-                                ></textarea>
-                            </article>
                         </section>
 
-                        <section class="generate-row">
-                            <button
-                                id="generate"
-                                class="btn btn-primary btn-lg"
-                            >
-                                Générer
-                            </button>
-                            <div class="generate-controls">
-                                <p class="field-label">Nombre d'images</p>
-                                <div
-                                    class="count-picker"
-                                    role="radiogroup"
-                                    aria-label="Nombre d'images"
-                                >
-                                    <label class="count-option">
-                                        <input
-                                            type="radio"
-                                            name="count"
-                                            value="1"
-                                        />
-                                        <span>1</span>
-                                    </label>
-                                    <label class="count-option">
-                                        <input
-                                            type="radio"
-                                            name="count"
-                                            value="2"
-                                            checked
-                                        />
-                                        <span>2</span>
-                                    </label>
-                                    <label class="count-option">
-                                        <input
-                                            type="radio"
-                                            name="count"
-                                            value="3"
-                                        />
-                                        <span>3</span>
-                                    </label>
-                                    <label class="count-option">
-                                        <input
-                                            type="radio"
-                                            name="count"
-                                            value="4"
-                                        />
-                                        <span>4</span>
-                                    </label>
+                        <section class="prompt-bar card">
+                            <div class="prompt-bar-top">
+                                <div class="card-header">
+                                    <h2>Prompt</h2>
+                                </div>
+                                <div class="generate-inline">
+                                    <div
+                                        class="count-picker"
+                                        role="radiogroup"
+                                        aria-label="Nombre d'images"
+                                    >
+                                        <label class="count-option">
+                                            <input type="radio" name="count" value="1" />
+                                            <span>1</span>
+                                        </label>
+                                        <label class="count-option">
+                                            <input type="radio" name="count" value="2" checked />
+                                            <span>2</span>
+                                        </label>
+                                        <label class="count-option">
+                                            <input type="radio" name="count" value="3" />
+                                            <span>3</span>
+                                        </label>
+                                        <label class="count-option">
+                                            <input type="radio" name="count" value="4" />
+                                            <span>4</span>
+                                        </label>
+                                    </div>
+                                    <button
+                                        id="generate"
+                                        class="btn btn-primary"
+                                    >
+                                        G&eacute;n&eacute;rer
+                                    </button>
                                 </div>
                             </div>
+                            <textarea
+                                id="prompt"
+                                class="prompt-area"
+                                placeholder="Ex: style minimal, palette bleu nuit, forte hi&eacute;rarchie typographique..."
+                                rows="3"
+                            ></textarea>
                         </section>
 
                         <section class="card results-card">
                             <div class="results-header">
                                 <div>
-                                    <h2>Résultats</h2>
-                                    <p class="muted">
-                                        Générations de la session en cours.
-                                    </p>
+                                    <h2>R&eacute;sultats</h2>
                                 </div>
-                            </div>
-                            <div class="status">
-                                <p id="status">En attente d'une génération.</p>
-                                <div id="statusDetails"></div>
+                                <div class="status">
+                                    <p id="status">En attente d'une g&eacute;n&eacute;ration.</p>
+                                    <div id="statusDetails"></div>
+                                </div>
                             </div>
                             <div id="resultsGrid" class="results-grid"></div>
                         </section>
                     </section>
 
-                    <!-- Gallery View - All generations from all projects -->
-                    <section class="app-view" data-view="gallery">
-                        <section class="gallery-header card">
-                            <div class="gallery-header-content">
-                                <div class="gallery-title">
-                                    <svg
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                    >
-                                        <rect
-                                            x="3"
-                                            y="3"
-                                            width="7"
-                                            height="7"
-                                            rx="1"
-                                        />
-                                        <rect
-                                            x="14"
-                                            y="3"
-                                            width="7"
-                                            height="7"
-                                            rx="1"
-                                        />
-                                        <rect
-                                            x="3"
-                                            y="14"
-                                            width="7"
-                                            height="7"
-                                            rx="1"
-                                        />
-                                        <rect
-                                            x="14"
-                                            y="14"
-                                            width="7"
-                                            height="7"
-                                            rx="1"
-                                        />
-                                    </svg>
-                                    <div>
-                                        <h1>Galerie</h1>
-                                        <p class="muted">
-                                            Toutes vos générations en un seul
-                                            endroit.
-                                        </p>
-                                    </div>
-                                </div>
-                                <div class="gallery-stats">
-                                    <div class="stat-item">
-                                        <span
-                                            id="totalImages"
-                                            class="stat-value"
-                                            >0</span
-                                        >
-                                        <span class="stat-label">Images</span>
-                                    </div>
-                                </div>
+                    <!-- Create View -->
+                    <section class="app-view" data-view="create">
+                        <header class="view-banner">
+                            <div class="banner-title">
+                                <h1>Cr&eacute;er</h1>
+                                <p class="subtitle">D&eacute;crivez, inspirez, g&eacute;n&eacute;rez.</p>
                             </div>
-                            <div class="gallery-filters">
-                                <div class="search-box">
-                                    <svg
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                    >
-                                        <circle cx="11" cy="11" r="8" />
-                                        <path d="m21 21-4.35-4.35" />
-                                    </svg>
-                                    <input
-                                        id="gallerySearch"
-                                        type="text"
-                                        placeholder="Rechercher par prompt..."
-                                    />
+                            <div class="banner-metrics" aria-label="Informations cl&eacute;s">
+                                <span class="pill">~1 min</span>
+                                <span class="pill">~0,15 &euro;/img</span>
+                                <span class="pill" id="createMonthlyCost">--</span>
+                                <span class="pill quota-pill" id="createQuotaRemaining" title="G&eacute;n&eacute;rations restantes aujourd'hui">--</span>
+                            </div>
+                        </header>
+
+                        <section class="showcase-section" id="createShowcase" hidden>
+                            <h3>Exemples</h3>
+                            <div class="showcase-grid">
+                                <div class="showcase-card">
+                                    <div class="showcase-placeholder"></div>
+                                    <p>Exemple : &laquo; Infographie comparant 3 offres cloud avec ic&ocirc;nes et couleurs vives &raquo;</p>
                                 </div>
-                                <select id="gallerySort" class="filter-select">
-                                    <option value="recent">Plus récents</option>
-                                    <option value="oldest">Plus anciens</option>
-                                </select>
+                                <div class="showcase-card">
+                                    <div class="showcase-placeholder"></div>
+                                    <p>Exemple : &laquo; Sch&eacute;ma d'architecture micro-services avec fl&egrave;ches et labels &raquo;</p>
+                                </div>
                             </div>
                         </section>
 
-                        <section class="gallery-content">
-                            <p id="galleryEmpty" class="empty-state card">
-                                <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                >
-                                    <rect
-                                        x="3"
-                                        y="3"
-                                        width="18"
-                                        height="18"
-                                        rx="2"
-                                        ry="2"
+                        <!-- Hidden: keep inspo zone in DOM for JS compatibility -->
+                        <div hidden>
+                            <div class="dropzone" data-zone="create-inspo">
+                                <input id="createInspoInput" type="file" accept="image/*" multiple hidden />
+                                <div id="createInspoPreview" class="preview-grid"></div>
+                            </div>
+                            <button id="createRefToggle" class="btn btn-ghost btn-sm" type="button">+</button>
+                            <div id="createRefContainer" class="create-ref-container"></div>
+                        </div>
+
+                        <section class="inputs-duo">
+                            <article class="card">
+                                <div class="card-header">
+                                    <h2>Prompt</h2>
+                                    <p>D&eacute;crivez le visuel &agrave; cr&eacute;er.</p>
+                                </div>
+                                <textarea
+                                    id="createPrompt"
+                                    class="prompt-area create-prompt-area"
+                                    placeholder="D&eacute;crivez le visuel que vous souhaitez cr&eacute;er... Ex: infographie sur les &eacute;nergies renouvelables avec des ic&ocirc;nes, des chiffres cl&eacute;s et une palette verte."
+                                    rows="5"
+                                ></textarea>
+                                <div class="generate-inline">
+                                    <div
+                                        class="count-picker"
+                                        role="radiogroup"
+                                        aria-label="Nombre d'images"
+                                    >
+                                        <label class="count-option">
+                                            <input type="radio" name="createCount" value="1" />
+                                            <span>1</span>
+                                        </label>
+                                        <label class="count-option">
+                                            <input type="radio" name="createCount" value="2" checked />
+                                            <span>2</span>
+                                        </label>
+                                        <label class="count-option">
+                                            <input type="radio" name="createCount" value="3" />
+                                            <span>3</span>
+                                        </label>
+                                        <label class="count-option">
+                                            <input type="radio" name="createCount" value="4" />
+                                            <span>4</span>
+                                        </label>
+                                    </div>
+                                    <button
+                                        id="createGenerate"
+                                        class="btn btn-primary"
+                                    >
+                                        G&eacute;n&eacute;rer
+                                    </button>
+                                </div>
+                            </article>
+
+                            <article class="card">
+                                <div class="card-header">
+                                    <h2>Image de r&eacute;f&eacute;rence</h2>
+                                    <p>Optionnel &mdash; l'IA s'en inspirera librement.</p>
+                                </div>
+                                <div class="dropzone" data-zone="create-base">
+                                    <input
+                                        id="createBaseInput"
+                                        type="file"
+                                        accept="image/*"
+                                        hidden
                                     />
-                                    <circle cx="8.5" cy="8.5" r="1.5" />
-                                    <polyline points="21 15 16 10 5 21" />
-                                </svg>
-                                <span>Aucune génération pour le moment.</span>
-                                <span class="muted"
-                                    >Vos images apparaîtront ici après
-                                    génération.</span
-                                >
-                            </p>
-                            <div id="galleryGrid" class="gallery-grid"></div>
-                            <button
-                                id="galleryLoadMore"
-                                class="btn btn-outline"
-                                type="button"
-                                hidden
-                            >
-                                Charger plus d'images
-                            </button>
+                                    <div class="dropzone-content">
+                                        <p>Glissez-d&eacute;posez une image</p>
+                                        <span>ou cliquez pour importer</span>
+                                    </div>
+                                    <div
+                                        id="createBasePreview"
+                                        class="preview-single"
+                                    ></div>
+                                </div>
+                            </article>
+                        </section>
+
+                        <section class="card results-card">
+                            <div class="results-header">
+                                <div>
+                                    <h2>R&eacute;sultats</h2>
+                                </div>
+                                <div class="status">
+                                    <p id="createStatus">En attente d'une g&eacute;n&eacute;ration.</p>
+                                    <div id="createStatusDetails"></div>
+                                </div>
+                            </div>
+                            <div
+                                id="createResultsGrid"
+                                class="results-grid"
+                            ></div>
                         </section>
                     </section>
 
-                    <section class="app-view" data-view="admin">
-                        <section id="adminPanel" class="card admin-card" hidden>
-                            <div class="card-header">
-                                <h2>Administration</h2>
-                                <p>Gestion des accès, rôles et comptes.</p>
+                    <!-- Admin: Users Page -->
+                    <section class="app-view" data-view="admin-users">
+                        <header class="view-banner">
+                            <div class="banner-title">
+                                <h1>Utilisateurs</h1>
+                                <p class="subtitle">Gestion des acc&egrave;s, r&ocirc;les et comptes.</p>
                             </div>
+                        </header>
+                        <section id="adminPanel" class="card admin-card">
                             <form id="adminCreateForm" class="admin-form">
                                 <div class="admin-form-row">
                                     <div class="admin-field">
-                                        <label
-                                            class="field-label"
-                                            for="adminEmail"
-                                            >Email</label
-                                        >
-                                        <input
-                                            id="adminEmail"
-                                            type="email"
-                                            placeholder="utilisateur@entreprise.com"
-                                            required
-                                        />
+                                        <label class="field-label" for="adminEmail">Email</label>
+                                        <input id="adminEmail" type="email" placeholder="utilisateur@entreprise.com" required />
                                     </div>
                                     <div class="admin-field">
-                                        <label
-                                            class="field-label"
-                                            for="adminPassword"
-                                            >Mot de passe</label
-                                        >
-                                        <input
-                                            id="adminPassword"
-                                            type="password"
-                                            placeholder="Mot de passe temporaire"
-                                            required
-                                        />
+                                        <label class="field-label" for="adminPassword">Mot de passe</label>
+                                        <input id="adminPassword" type="password" placeholder="Mot de passe temporaire" required />
                                     </div>
                                     <div class="admin-field">
-                                        <label
-                                            class="field-label"
-                                            for="adminRole"
-                                            >Rôle</label
-                                        >
+                                        <label class="field-label" for="adminRole">R&ocirc;le</label>
                                         <select id="adminRole">
-                                            <option value="member">
-                                                Member
-                                            </option>
+                                            <option value="member">Member</option>
                                             <option value="admin">Admin</option>
                                         </select>
                                     </div>
-                                    <button
-                                        id="adminCreateBtn"
-                                        class="btn btn-primary"
-                                        type="submit"
-                                    >
-                                        Créer
-                                    </button>
+                                    <button id="adminCreateBtn" class="btn btn-primary" type="submit">Cr&eacute;er</button>
                                 </div>
                                 <p id="adminStatus" class="note"></p>
                             </form>
                             <div class="admin-list">
                                 <div class="admin-list-header">
                                     <span>Email</span>
-                                    <span>Rôle</span>
+                                    <span>R&ocirc;le</span>
                                     <span>Statut</span>
                                     <span>Actions</span>
                                 </div>
-                                <div
-                                    id="adminUsers"
-                                    class="admin-list-body"
-                                ></div>
+                                <div id="adminUsers" class="admin-list-body"></div>
                             </div>
                         </section>
-                        <section id="usagePanel" class="card admin-card" hidden>
-                            <div class="card-header">
-                                <h2>Suivi des couts API</h2>
-                                <p>
-                                    Consommation Gemini estimee par periode et
-                                    par utilisateur.
-                                </p>
+                    </section>
+
+                    <!-- Admin: Usage Page -->
+                    <section class="app-view" data-view="admin-usage">
+                        <header class="view-banner">
+                            <div class="banner-title">
+                                <h1>Utilisation</h1>
+                                <p class="subtitle">Monitoring des co&ucirc;ts et de l'activit&eacute;.</p>
                             </div>
-                            <div class="usage-controls">
+                        </header>
+
+                        <!-- Filters bar -->
+                        <div class="dash-filters">
+                            <div class="dash-filter-group">
+                                <label class="dash-filter-label">P&eacute;riode</label>
                                 <select id="usagePeriod" class="filter-select">
                                     <option value="day">Aujourd'hui</option>
-                                    <option value="month" selected>
-                                        Ce mois
-                                    </option>
+                                    <option value="week">7 jours</option>
+                                    <option value="30days">30 jours</option>
+                                    <option value="month" selected>Ce mois</option>
                                     <option value="all">Tout</option>
                                 </select>
-                                <button
-                                    id="usageRefresh"
-                                    class="btn btn-outline btn-sm"
-                                    type="button"
-                                >
-                                    Actualiser
-                                </button>
                             </div>
-                            <div class="usage-summary" id="usageSummary">
-                                <div class="stat-item">
-                                    <span id="usageTotalCost" class="stat-value"
-                                        >$0.00</span
-                                    >
-                                    <span class="stat-label"
-                                        >Cout total (USD)</span
-                                    >
-                                </div>
-                                <div class="stat-item">
-                                    <span
-                                        id="usageTotalCalls"
-                                        class="stat-value"
-                                        >0</span
-                                    >
-                                    <span class="stat-label">Appels API</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span
-                                        id="usageTotalImages"
-                                        class="stat-value"
-                                        >0</span
-                                    >
-                                    <span class="stat-label"
-                                        >Images generees</span
-                                    >
-                                </div>
-                                <div class="stat-item">
-                                    <span
-                                        id="usageSuccessRate"
-                                        class="stat-value"
-                                        >0%</span
-                                    >
-                                    <span class="stat-label"
-                                        >Taux de succes</span
-                                    >
-                                </div>
+                            <div class="dash-filter-group">
+                                <label class="dash-filter-label">Utilisateur</label>
+                                <select id="usageUserFilter" class="filter-select">
+                                    <option value="">Tous les utilisateurs</option>
+                                </select>
                             </div>
-                            <div class="usage-section">
-                                <h3>Par utilisateur</h3>
-                                <div class="admin-list">
-                                    <div
-                                        class="admin-list-header usage-user-header"
-                                    >
-                                        <span>Email</span>
-                                        <span>Appels</span>
-                                        <span>Cout (USD)</span>
+                            <button id="usageRefresh" class="btn btn-outline btn-sm" type="button">Actualiser</button>
+                            <div class="dash-filter-sep"></div>
+                            <div class="dash-filter-group">
+                                <label class="dash-filter-label">Limite / jour</label>
+                                <input id="settingDailyLimit" type="number" min="1" max="999" value="20" class="filter-input" />
+                            </div>
+                            <div class="dash-filter-group">
+                                <label class="dash-filter-label">Budget mensuel ($)</label>
+                                <input id="settingMonthlyBudget" type="number" min="0" step="10" value="500" class="filter-input" />
+                            </div>
+                            <button id="saveSettingsBtn" class="btn btn-primary btn-sm" type="button">Enregistrer</button>
+                            <span id="settingsStatus" class="note"></span>
+                        </div>
+
+                        <!-- KPI Cards -->
+                        <div class="dash-kpis">
+                            <div class="dash-kpi">
+                                <span class="dash-kpi-value" id="usageTotalCost">$0.00</span>
+                                <span class="dash-kpi-label">Co&ucirc;t total</span>
+                            </div>
+                            <div class="dash-kpi">
+                                <span class="dash-kpi-value" id="usageTotalImages">0</span>
+                                <span class="dash-kpi-label">Images g&eacute;n&eacute;r&eacute;es</span>
+                            </div>
+                            <div class="dash-kpi">
+                                <span class="dash-kpi-value" id="usageTotalCalls">0</span>
+                                <span class="dash-kpi-label">Appels API</span>
+                            </div>
+                            <div class="dash-kpi">
+                                <span class="dash-kpi-value" id="usageSuccessRate">0%</span>
+                                <span class="dash-kpi-label">Taux de succ&egrave;s</span>
+                            </div>
+                            <div class="dash-kpi">
+                                <span class="dash-kpi-value" id="usageAvgDay">$0.00</span>
+                                <span class="dash-kpi-label">Moy. / jour</span>
+                            </div>
+                        </div>
+
+                        <!-- Budget + Modes row -->
+                        <div class="dash-row">
+                            <div class="dash-card dash-card--budget">
+                                <h3>Budget mensuel</h3>
+                                <div class="budget-status">
+                                    <div class="budget-bar-track">
+                                        <div id="budgetBarFill" class="budget-bar-fill" style="width: 0%"></div>
                                     </div>
-                                    <div
-                                        id="usagePerUser"
-                                        class="admin-list-body"
-                                    ></div>
+                                    <span id="budgetBarLabel" class="budget-label">0.00 $ / 500.00 $ (0%)</span>
                                 </div>
                             </div>
-                            <div class="usage-section">
-                                <h3>Par jour</h3>
-                                <div class="admin-list">
-                                    <div
-                                        class="admin-list-header usage-daily-header"
-                                    >
-                                        <span>Date</span>
-                                        <span>Appels</span>
-                                        <span>Cout (USD)</span>
-                                    </div>
-                                    <div
-                                        id="usageDaily"
-                                        class="admin-list-body"
-                                    ></div>
-                                </div>
+                            <div class="dash-card dash-card--modes">
+                                <h3>R&eacute;partition par mode</h3>
+                                <div id="usageModeBreakdown" class="dash-modes"></div>
                             </div>
-                        </section>
+                        </div>
+
+                        <!-- Daily activity chart -->
+                        <div class="dash-card">
+                            <h3>Activit&eacute; journali&egrave;re</h3>
+                            <div id="usageDailyChart" class="dash-chart"></div>
+                        </div>
+
+                        <!-- Detail table (contextual: users or days) -->
+                        <div class="dash-card">
+                            <h3 id="usageDetailTitle">D&eacute;tail par utilisateur</h3>
+                            <div id="usageDetailTable" class="dash-table"></div>
+                        </div>
+
                     </section>
                 </div>
             </main>
@@ -676,70 +592,6 @@
                     ×
                 </button>
                 <img id="previewImage" alt="Aperçu de la génération" />
-            </div>
-        </div>
-
-        <div id="deleteProjectModal" class="modal" aria-hidden="true">
-            <div class="modal-backdrop" data-delete-close></div>
-            <div
-                class="modal-content delete-modal-content"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Confirmer la suppression"
-            >
-                <div class="delete-modal-icon">
-                    <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <path
-                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-                        />
-                        <line x1="12" y1="9" x2="12" y2="13" />
-                        <line x1="12" y1="17" x2="12.01" y2="17" />
-                    </svg>
-                </div>
-                <h3>Supprimer ce projet ?</h3>
-                <p class="delete-modal-project-name" id="deleteProjectName"></p>
-                <div class="delete-modal-warning">
-                    <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="8" x2="12" y2="12" />
-                        <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <p>
-                        Toutes les images générées dans ce projet seront
-                        définitivement supprimées. Cette action est
-                        irréversible.
-                    </p>
-                </div>
-                <div class="delete-modal-actions">
-                    <button
-                        type="button"
-                        class="btn btn-outline"
-                        data-delete-close
-                    >
-                        Annuler
-                    </button>
-                    <button
-                        type="button"
-                        class="btn btn-danger"
-                        id="confirmDeleteProject"
-                    >
-                        Supprimer le projet
-                    </button>
-                </div>
             </div>
         </div>
 

@@ -1,7 +1,6 @@
 ﻿import dotenv from "dotenv";
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
 
 dotenv.config();
 
@@ -11,7 +10,6 @@ const apiKey = process.env.GEMINI_API_KEY;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabaseBucket = process.env.SUPABASE_IMAGE_BUCKET || "graphic-ai";
 
 const supabaseEnabled = Boolean(
   supabaseUrl && supabaseAnonKey && supabaseServiceKey,
@@ -32,6 +30,8 @@ app.use(express.static("public"));
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const GEMINI_ENDPOINT =
+  "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent";
+const GEMINI_CREATE_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent";
 const VALID_ASPECT_RATIOS = new Set([
   "1:1",
@@ -60,11 +60,21 @@ const SYSTEM_INSTRUCTION = {
   ],
 };
 
-const MIME_EXTENSION_MAP = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/webp": "webp",
+const CREATE_SYSTEM_INSTRUCTION = {
+  parts: [
+    {
+      text: [
+        "You are a professional visual designer and infographic creator.",
+        "Your goal is to produce high-quality, polished visuals from the user's textual description.",
+        "You encourage creative freedom: interpret the brief with originality while maintaining a professional, clean result.",
+        "Always produce a clean white background, clear visual hierarchy, proper alignments, and readable typography.",
+        "If a source image is provided, use it as loose inspiration — extract layout ideas or content cues without strict data fidelity.",
+        "If style reference images are provided, extract their visual language (color palette, typography, iconography, layout patterns) and apply it creatively.",
+        "You may invent placeholder data, icons, or illustrations if they serve the user's described concept.",
+        "Prioritize visual impact, clarity, and aesthetic quality above all.",
+      ].join(" "),
+    },
+  ],
 };
 
 const ensureSupabase = (res) => {
@@ -98,7 +108,7 @@ const requireAuth = async (req, res, next) => {
 const loadProfile = async (userId) => {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("id, email, role, is_active")
+    .select("id, email, role, is_active, daily_limit_override")
     .eq("id", userId)
     .single();
   if (error) throw error;
@@ -126,75 +136,48 @@ const requireAdmin = (req, res, next) => {
   return next();
 };
 
-const resolveImageExtension = (mimeType) =>
-  MIME_EXTENSION_MAP[mimeType?.toLowerCase?.()] || "png";
+const checkQuota = async (req, res, next) => {
+  if (!supabaseEnabled) return next();
+  try {
+    const { data: limitRow } = await supabaseAdmin
+      .from("usage_limits")
+      .select("value")
+      .eq("key", "default_daily_limit")
+      .single();
+    const globalLimit = parseInt(limitRow?.value) || 20;
+    const effectiveLimit =
+      req.profile.daily_limit_override ?? globalLimit;
 
-const uploadToSupabase = async ({ image, userId }) => {
-  const extension = resolveImageExtension(image.mimeType);
-  const fileName = `${userId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
-  const buffer = Buffer.from(image.data, "base64");
-  const { error } = await supabaseAdmin.storage
-    .from(supabaseBucket)
-    .upload(fileName, buffer, {
-      contentType: image.mimeType || "image/png",
-      upsert: false,
-    });
-  if (error) throw error;
-  return fileName;
-};
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const { count } = await supabaseAdmin
+      .from("api_usage")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", req.user.id)
+      .eq("success", true)
+      .gte("created_at", todayStart.toISOString());
 
-const insertImageRow = async ({
-  image,
-  storagePath,
-  userId,
-  mode,
-  prompt,
-  projectId,
-}) => {
-  const { data, error } = await supabaseAdmin
-    .from("images")
-    .insert({
-      storage_path: storagePath,
-      mime_type: image.mimeType || "image/png",
-      created_by: userId,
-      mode: mode || "base",
-      prompt: prompt || null,
-      project_id: projectId || null,
-    })
-    .select(
-      "id, created_at, storage_path, mime_type, created_by, mode, prompt, project_id",
-    )
-    .single();
-  if (error) throw error;
-  return data;
-};
+    if (count >= effectiveLimit) {
+      return res.status(429).json({
+        error: `Limite quotidienne atteinte (${effectiveLimit} générations/jour). Réessayez demain ou contactez un administrateur.`,
+        quota: {
+          dailyLimit: effectiveLimit,
+          usedToday: count,
+          remaining: 0,
+        },
+      });
+    }
 
-const signImageRows = async (rows) => {
-  if (!rows || rows.length === 0) return [];
-  const paths = rows.map((row) => row.storage_path);
-  const { data, error } = await supabaseAdmin.storage
-    .from(supabaseBucket)
-    .createSignedUrls(paths, 60 * 60);
-  if (error) throw error;
-  const urlMap = new Map(
-    (data || [])
-      .map((entry) => {
-        const url = entry?.signedUrl || entry?.signedURL || entry?.signed_url;
-        const path = entry?.path || entry?.file_path;
-        return [path, url];
-      })
-      .filter((entry) => entry[0] && entry[1]),
-  );
-  return rows.map((row) => ({
-    id: row.id,
-    createdAt: row.created_at,
-    createdBy: row.created_by,
-    mimeType: row.mime_type,
-    mode: row.mode,
-    prompt: row.prompt,
-    storagePath: row.storage_path,
-    url: urlMap.get(row.storage_path) || null,
-  }));
+    req.quota = {
+      dailyLimit: effectiveLimit,
+      usedToday: count,
+      remaining: effectiveLimit - count,
+    };
+    return next();
+  } catch (err) {
+    console.error("Quota check error:", err?.message);
+    return next();
+  }
 };
 
 const buildPrompt = ({ userPrompt, inspirationCount }) => {
@@ -245,6 +228,35 @@ const buildRefinePrompt = ({ userPrompt, inspirationCount }) => {
   return lines.join("\n");
 };
 
+const buildCreatePrompt = ({ userPrompt, inspirationCount, hasSourceImage }) => {
+  const lines = [
+    "TASK: Create a professional visual from the description below.",
+    "",
+    "STEP 1 — UNDERSTAND THE BRIEF: Read the user's description carefully and identify the key message, structure, and visual elements requested.",
+    "STEP 2 — STYLE ANALYSIS: " +
+      (inspirationCount > 0
+        ? `Study the visual language of the ${inspirationCount} style reference(s): color palette, typography, icon style, layout structure, and overall aesthetic. Apply this style creatively.`
+        : "Use modern infographic best practices: clean layout, professional color palette, clear typography hierarchy."),
+  ];
+
+  if (hasSourceImage) {
+    lines.push(
+      "STEP 3 — REFERENCE IMAGE: A source image is provided as loose inspiration. Draw layout ideas or content cues from it, but you are free to reinterpret creatively. No strict data fidelity required.",
+    );
+  }
+
+  lines.push(
+    "",
+    "OUTPUT: A single polished visual on a white background. Prioritize clarity, visual impact, and professional quality.",
+  );
+
+  if (userPrompt && userPrompt.trim().length > 0) {
+    lines.push("", "USER DESCRIPTION:", userPrompt.trim());
+  }
+
+  return lines.join("\n");
+};
+
 const buildParts = ({
   baseImage,
   inspirations,
@@ -254,20 +266,28 @@ const buildParts = ({
   variantTotal,
   mode,
 }) => {
-  const promptBuilder = mode === "refine" ? buildRefinePrompt : buildPrompt;
+  const isCreate = mode === "create";
+  const promptBuilder = isCreate
+    ? buildCreatePrompt
+    : mode === "refine"
+      ? buildRefinePrompt
+      : buildPrompt;
   const parts = [];
 
-  // 1. Source image FIRST (context before instructions)
-  parts.push({
-    text: "SOURCE CHART — Extract ALL data, text, numbers, labels, and structure from this image:",
-  });
-  parts.push({
-    inline_data: {
-      mime_type: baseImage.mimeType,
-      data: baseImage.data,
-    },
-    media_resolution: { level: "MEDIA_RESOLUTION_HIGH" },
-  });
+  // 1. Source image (required for redesign/refine, optional for create)
+  if (baseImage) {
+    const label = isCreate
+      ? "REFERENCE IMAGE — Use this as loose inspiration for layout and content cues:"
+      : "SOURCE CHART — Extract ALL data, text, numbers, labels, and structure from this image:";
+    parts.push({ text: label });
+    parts.push({
+      inline_data: {
+        mime_type: baseImage.mimeType,
+        data: baseImage.data,
+      },
+      media_resolution: { level: "MEDIA_RESOLUTION_HIGH" },
+    });
+  }
 
   // 2. Inspiration images (style only)
   if (inspirations.length > 0) {
@@ -290,10 +310,16 @@ const buildParts = ({
 
   // 3. Instructions AFTER context (per Gemini 3 best practice)
   parts.push({
-    text: promptBuilder({
-      userPrompt: prompt,
-      inspirationCount: inspirations.length,
-    }),
+    text: isCreate
+      ? promptBuilder({
+          userPrompt: prompt,
+          inspirationCount: inspirations.length,
+          hasSourceImage: Boolean(baseImage),
+        })
+      : promptBuilder({
+          userPrompt: prompt,
+          inspirationCount: inspirations.length,
+        }),
   });
 
   // 4. Variant differentiation (only when multiple variants requested)
@@ -302,7 +328,7 @@ const buildParts = ({
       text:
         mode === "refine"
           ? `This is variant ${variantIndex} of ${variantTotal}. Make small visual differences compared to other variants while keeping the same modifications.`
-          : `This is variant ${variantIndex} of ${variantTotal}. Use a distinctly different visual interpretation: different color palette, different typography weight, different layout arrangement. The data must remain identical across all variants.`,
+          : `This is variant ${variantIndex} of ${variantTotal}. Use a distinctly different visual interpretation: different color palette, different typography weight, different layout arrangement.${isCreate ? "" : " The data must remain identical across all variants."}`,
     });
   }
 
@@ -415,7 +441,7 @@ const logApiUsage = async ({
 
 const normalizeImageConfig = (config) => {
   if (!config || typeof config !== "object") {
-    return { imageSize: "4K" };
+    return { imageSize: "2K" };
   }
 
   const imageSizeInput =
@@ -427,7 +453,7 @@ const normalizeImageConfig = (config) => {
 
   const imageSize = VALID_IMAGE_SIZES.has(imageSizeInput)
     ? imageSizeInput
-    : "4K";
+    : "2K";
   const aspectRatio = VALID_ASPECT_RATIOS.has(aspectRatioInput)
     ? aspectRatioInput
     : null;
@@ -461,9 +487,60 @@ const isImageConfigError = (error) => {
   );
 };
 
-const callGeminiRaw = async ({ parts, generationConfig }) => {
+const isTransientGenerationError = (error) => {
+  const message = (error?.message || "").toLowerCase();
+  const code = (error?.code || "").toString().toUpperCase();
+  const status = Number(error?.status);
+  return (
+    [429, 500, 502, 503, 504].includes(status) ||
+    code === "UNAVAILABLE" ||
+    code === "RESOURCE_EXHAUSTED" ||
+    message.includes("high demand") ||
+    message.includes("try again later") ||
+    message.includes("temporarily unavailable")
+  );
+};
+
+const buildNoImageResponse = (errors) => {
+  if (!Array.isArray(errors) || errors.length === 0) {
+    return {
+      status: 502,
+      message:
+        "Aucune image n'a été retournée par le modèle. Réessaie dans quelques instants.",
+    };
+  }
+
+  if (errors.some(isTransientGenerationError)) {
+    return {
+      status: 503,
+      message:
+        "Le modèle est temporairement indisponible (forte demande). Réessaie dans quelques instants.",
+    };
+  }
+
+  const clientError = errors.find(
+    (error) => Number(error?.status) >= 400 && Number(error?.status) < 500,
+  );
+  if (clientError) {
+    return {
+      status: Number(clientError.status) || 400,
+      message:
+        "La génération a échoué côté modèle. Vérifie le prompt et les paramètres puis réessaie.",
+    };
+  }
+
+  return {
+    status: 502,
+    message:
+      "Le service de génération n'a pas pu produire d'image. Réessaie dans quelques instants.",
+  };
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpoint, maxRetries = 3 }) => {
   const body = {
-    system_instruction: SYSTEM_INSTRUCTION,
+    system_instruction: systemInstruction || SYSTEM_INSTRUCTION,
     contents: [
       {
         parts,
@@ -472,44 +549,68 @@ const callGeminiRaw = async ({ parts, generationConfig }) => {
     generationConfig,
   };
 
-  const controller = new AbortController();
   const timeoutMs = process.env.VERCEL === "1" ? 55000 : 120000;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  try {
-    const response = await fetch(GEMINI_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const data = await response.json();
+    try {
+      const response = await fetch(endpoint || GEMINI_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw buildApiError(data, response.status);
-    }
+      const data = await response.json();
 
-    return data;
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      const secs = Math.round(timeoutMs / 1000);
-      throw {
-        message: `Timeout: la generation a depasse ${secs} secondes.`,
-        status: 504,
+      if (!response.ok) {
+        const apiError = buildApiError(data, response.status);
+        if (attempt < maxRetries && isTransientGenerationError(apiError)) {
+          const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 8000);
+          console.log(`Gemini ${response.status} (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
+          clearTimeout(timeoutId);
+          await sleep(delay);
+          continue;
+        }
+        throw apiError;
+      }
+
+      return data;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error?.name === "AbortError") {
+        const secs = Math.round(timeoutMs / 1000);
+        throw {
+          message: `Timeout: la generation a depasse ${secs} secondes.`,
+          status: 504,
+        };
+      }
+      const wrapped = {
+        message: error?.message || "Erreur reseau.",
+        status: Number(error?.status) || 502,
+        code: error?.code,
+        details: Array.isArray(error?.details) ? error.details : [],
       };
+      if (attempt < maxRetries && isTransientGenerationError(wrapped)) {
+        const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 8000);
+        console.log(`Gemini error (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
+        await sleep(delay);
+        continue;
+      }
+      throw wrapped;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    throw { message: error?.message || "Erreur reseau.", status: 502 };
-  } finally {
-    clearTimeout(timeoutId);
   }
 };
 
-const callGemini = async ({ parts, generationConfig }) => {
-  const data = await callGeminiRaw({ parts, generationConfig });
+const callGemini = async ({ parts, generationConfig, systemInstruction, endpoint }) => {
+  const data = await callGeminiRaw({ parts, generationConfig, systemInstruction, endpoint });
   const meta = data?.usageMetadata || data?.usage_metadata || null;
   return {
     images: extractImages(data),
@@ -545,156 +646,6 @@ app.get("/api/me", requireAuth, requireActiveProfile, (req, res) => {
     profile: req.profile,
   });
 });
-
-app.get("/api/library", requireAuth, requireActiveProfile, async (req, res) => {
-  const limit = clamp(Number.parseInt(req.query.limit, 10) || 24, 1, 60);
-  const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
-
-  let query = supabaseAdmin
-    .from("images")
-    .select("id, created_at, storage_path, mime_type, created_by, mode, prompt")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (cursor) {
-    query = query.lt("created_at", cursor);
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    return res
-      .status(500)
-      .json({ error: "Impossible de charger la bibliothèque." });
-  }
-
-  let signed = [];
-  try {
-    signed = await signImageRows(data || []);
-  } catch (signError) {
-    return res.status(500).json({ error: "Impossible de signer les images." });
-  }
-  const nextCursor =
-    data && data.length === limit
-      ? data[data.length - 1]?.created_at || null
-      : null;
-
-  return res.json({ items: signed, nextCursor });
-});
-
-app.get(
-  "/api/images/:id",
-  requireAuth,
-  requireActiveProfile,
-  async (req, res) => {
-    const imageId = req.params.id;
-    if (!imageId) {
-      return res.status(400).json({ error: "Image invalide." });
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from("images")
-      .select("storage_path, mime_type")
-      .eq("id", imageId)
-      .single();
-
-    if (error || !data?.storage_path) {
-      return res.status(404).json({ error: "Image introuvable." });
-    }
-
-    let signedUrl = null;
-    try {
-      const signed = await signImageRows([
-        {
-          id: imageId,
-          created_at: null,
-          storage_path: data.storage_path,
-          mime_type: data.mime_type,
-          created_by: null,
-          mode: null,
-          prompt: null,
-        },
-      ]);
-      signedUrl = signed[0]?.url || null;
-    } catch (signError) {
-      signedUrl = null;
-    }
-
-    if (!signedUrl) {
-      return res
-        .status(500)
-        .json({ error: "Impossible de générer le lien sécurisé." });
-    }
-
-    try {
-      const fileResponse = await fetch(signedUrl);
-      if (!fileResponse.ok) {
-        return res
-          .status(502)
-          .json({ error: "Impossible de récupérer l'image." });
-      }
-      const arrayBuffer = await fileResponse.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString("base64");
-      return res.json({
-        data: base64,
-        mimeType: data.mime_type || "image/png",
-      });
-    } catch (fetchError) {
-      return res.status(502).json({ error: "Téléchargement échoué." });
-    }
-  },
-);
-
-// DELETE /api/images/:id - Supprimer une image générée
-app.delete(
-  "/api/images/:id",
-  requireAuth,
-  requireActiveProfile,
-  async (req, res) => {
-    const imageId = req.params.id;
-    if (!imageId) {
-      return res.status(400).json({ error: "Image invalide." });
-    }
-
-    // Récupérer l'image et vérifier la propriété
-    const { data, error } = await supabaseAdmin
-      .from("images")
-      .select("id, storage_path, created_by")
-      .eq("id", imageId)
-      .single();
-
-    if (error || !data) {
-      return res.status(404).json({ error: "Image introuvable." });
-    }
-
-    // Vérifier que l'utilisateur est propriétaire
-    if (data.created_by !== req.user.id) {
-      return res.status(403).json({ error: "Accès non autorisé." });
-    }
-
-    // Supprimer du storage
-    if (data.storage_path) {
-      try {
-        await supabaseAdmin.storage
-          .from(supabaseBucket)
-          .remove([data.storage_path]);
-      } catch (e) {
-        // Ignorer les erreurs de suppression storage
-      }
-    }
-
-    // Supprimer de la base de données
-    const { error: deleteError } = await supabaseAdmin
-      .from("images")
-      .delete()
-      .eq("id", imageId);
-
-    if (deleteError) {
-      return res.status(500).json({ error: "Suppression impossible." });
-    }
-
-    return res.json({ success: true });
-  },
-);
 
 app.get(
   "/api/admin/users",
@@ -783,7 +734,7 @@ app.patch(
   requireAdmin,
   async (req, res) => {
     const userId = req.params.id;
-    const { role, is_active: isActive, password } = req.body || {};
+    const { role, is_active: isActive, password, daily_limit_override: dailyLimitOverride } = req.body || {};
     const updates = {};
 
     if (role) {
@@ -797,6 +748,11 @@ app.patch(
           .json({ error: "Impossible de désactiver votre propre compte." });
       }
       updates.is_active = isActive;
+    }
+
+    if (dailyLimitOverride !== undefined) {
+      updates.daily_limit_override =
+        dailyLimitOverride === null ? null : parseInt(dailyLimitOverride);
     }
 
     if (Object.keys(updates).length > 0) {
@@ -828,6 +784,37 @@ app.patch(
     return res.json({ ok: true });
   },
 );
+
+app.get("/api/quota", requireAuth, requireActiveProfile, async (req, res) => {
+  if (!ensureSupabase(res)) return;
+  try {
+    const { data: limitRow } = await supabaseAdmin
+      .from("usage_limits")
+      .select("value")
+      .eq("key", "default_daily_limit")
+      .single();
+    const globalLimit = parseInt(limitRow?.value) || 20;
+    const effectiveLimit =
+      req.profile.daily_limit_override ?? globalLimit;
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const { count } = await supabaseAdmin
+      .from("api_usage")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", req.user.id)
+      .eq("success", true)
+      .gte("created_at", todayStart.toISOString());
+
+    return res.json({
+      dailyLimit: effectiveLimit,
+      usedToday: count || 0,
+      remaining: Math.max(0, effectiveLimit - (count || 0)),
+    });
+  } catch (err) {
+    return res.json({ dailyLimit: 20, usedToday: 0, remaining: 20 });
+  }
+});
 
 app.get(
   "/api/usage/monthly",
@@ -868,22 +855,81 @@ app.get(
 );
 
 app.get(
+  "/api/admin/settings",
+  requireAuth,
+  requireActiveProfile,
+  requireAdmin,
+  async (req, res) => {
+    if (!ensureSupabase(res)) return;
+    try {
+      const { data: rows, error } = await supabaseAdmin
+        .from("usage_limits")
+        .select("key, value");
+      if (error) throw error;
+      const settings = {};
+      (rows || []).forEach((r) => {
+        settings[r.key] = r.value;
+      });
+      return res.json({ settings });
+    } catch (err) {
+      return res.status(500).json({ error: "Impossible de charger les paramètres." });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/settings",
+  requireAuth,
+  requireActiveProfile,
+  requireAdmin,
+  async (req, res) => {
+    if (!ensureSupabase(res)) return;
+    const updates = req.body || {};
+    const allowedKeys = ["default_daily_limit", "monthly_budget_usd"];
+    try {
+      for (const [key, value] of Object.entries(updates)) {
+        if (!allowedKeys.includes(key)) continue;
+        const { error } = await supabaseAdmin
+          .from("usage_limits")
+          .upsert(
+            {
+              key,
+              value: String(value),
+              updated_at: new Date().toISOString(),
+              updated_by: req.user.id,
+            },
+            { onConflict: "key" },
+          );
+        if (error) throw error;
+      }
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: "Impossible de sauvegarder les paramètres." });
+    }
+  },
+);
+
+app.get(
   "/api/admin/usage",
   requireAuth,
   requireActiveProfile,
   requireAdmin,
   async (req, res) => {
     if (!ensureSupabase(res)) return;
-    const { period } = req.query;
+    const { period, user_id: filterUserId } = req.query;
 
     let startDate = null;
     const now = new Date();
     if (period === "day") {
-      startDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-      ).toISOString();
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    } else if (period === "week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      startDate = d.toISOString();
+    } else if (period === "30days") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 30);
+      startDate = d.toISOString();
     } else if (period === "all") {
       startDate = null;
     } else {
@@ -891,12 +937,26 @@ app.get(
     }
 
     try {
+      // Always fetch all profiles for the user filter dropdown
+      const { data: allProfiles } = await supabaseAdmin
+        .from("profiles")
+        .select("id, email, daily_limit_override, is_active")
+        .order("email");
+      const allUsers = (allProfiles || []).map((p) => ({
+        userId: p.id,
+        email: p.email,
+        dailyLimitOverride: p.daily_limit_override,
+        isActive: p.is_active,
+      }));
+
+      // Build usage query with optional user filter
       let query = supabaseAdmin
         .from("api_usage")
         .select(
-          "user_id, estimated_cost_usd, prompt_token_count, candidates_token_count, output_image_count, success, created_at",
+          "user_id, mode, estimated_cost_usd, prompt_token_count, candidates_token_count, output_image_count, success, created_at",
         );
       if (startDate) query = query.gte("created_at", startDate);
+      if (filterUserId) query = query.eq("user_id", filterUserId);
 
       const { data: rows, error } = await query.order("created_at", {
         ascending: false,
@@ -906,52 +966,77 @@ app.get(
       let totalCost = 0;
       let totalCalls = 0;
       let successfulCalls = 0;
-      let totalPromptTokens = 0;
-      let totalCandidatesTokens = 0;
       let totalOutputImages = 0;
       const dailyMap = {};
       const userMap = {};
+      const modeMap = {};
 
       (rows || []).forEach((row) => {
         totalCalls += 1;
         if (row.success) successfulCalls += 1;
         totalCost += Number(row.estimated_cost_usd) || 0;
-        totalPromptTokens += row.prompt_token_count || 0;
-        totalCandidatesTokens += row.candidates_token_count || 0;
         totalOutputImages += row.output_image_count || 0;
 
         const day = row.created_at?.slice(0, 10) || "unknown";
-        if (!dailyMap[day]) dailyMap[day] = { cost: 0, calls: 0 };
+        if (!dailyMap[day]) dailyMap[day] = { cost: 0, calls: 0, images: 0 };
         dailyMap[day].cost += Number(row.estimated_cost_usd) || 0;
         dailyMap[day].calls += 1;
+        dailyMap[day].images += row.output_image_count || 0;
 
         const uid = row.user_id;
         if (!userMap[uid])
-          userMap[uid] = { cost: 0, calls: 0, successfulCalls: 0 };
+          userMap[uid] = { cost: 0, calls: 0, images: 0 };
         userMap[uid].cost += Number(row.estimated_cost_usd) || 0;
         userMap[uid].calls += 1;
-        if (row.success) userMap[uid].successfulCalls += 1;
+        userMap[uid].images += row.output_image_count || 0;
+
+        const rowMode = row.mode || "base";
+        if (!modeMap[rowMode]) modeMap[rowMode] = { cost: 0, calls: 0 };
+        modeMap[rowMode].cost += Number(row.estimated_cost_usd) || 0;
+        modeMap[rowMode].calls += 1;
       });
 
-      const userIds = Object.keys(userMap);
-      const userProfiles = {};
-      if (userIds.length > 0) {
-        const { data: profiles } = await supabaseAdmin
-          .from("profiles")
-          .select("id, email")
-          .in("id", userIds);
-        (profiles || []).forEach((p) => {
-          userProfiles[p.id] = p.email;
-        });
-      }
+      // Profile lookup for users in the data
+      const profilesMap = {};
+      (allProfiles || []).forEach((p) => {
+        profilesMap[p.id] = p;
+      });
+
+      // Get global daily limit
+      const { data: limitRow } = await supabaseAdmin
+        .from("usage_limits")
+        .select("value")
+        .eq("key", "default_daily_limit")
+        .single();
+      const globalDailyLimit = parseInt(limitRow?.value) || 20;
+
+      // Count today's successful generations per user
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const todayStr = todayStart.toISOString();
+      const todayCountMap = {};
+      (rows || []).forEach((row) => {
+        if (row.success && row.created_at >= todayStr) {
+          todayCountMap[row.user_id] = (todayCountMap[row.user_id] || 0) + 1;
+        }
+      });
 
       const perUser = Object.entries(userMap)
-        .map(([uid, stats]) => ({
-          userId: uid,
-          email: userProfiles[uid] || "unknown",
-          calls: stats.calls,
-          cost: Math.round(stats.cost * 1_000_000) / 1_000_000,
-        }))
+        .map(([uid, stats]) => {
+          const profile = profilesMap[uid] || {};
+          const effectiveLimit =
+            profile.daily_limit_override ?? globalDailyLimit;
+          return {
+            userId: uid,
+            email: profile.email || "unknown",
+            calls: stats.calls,
+            images: stats.images,
+            cost: Math.round(stats.cost * 1_000_000) / 1_000_000,
+            usedToday: todayCountMap[uid] || 0,
+            dailyLimit: effectiveLimit,
+            dailyLimitOverride: profile.daily_limit_override ?? null,
+          };
+        })
         .sort((a, b) => b.cost - a.cost);
 
       const daily = Object.entries(dailyMap)
@@ -959,19 +1044,71 @@ app.get(
           date,
           cost: Math.round(stats.cost * 1_000_000) / 1_000_000,
           calls: stats.calls,
+          images: stats.images,
         }))
         .sort((a, b) => b.date.localeCompare(a.date));
 
+      const perMode = Object.entries(modeMap)
+        .map(([m, stats]) => ({
+          mode: m,
+          calls: stats.calls,
+          cost: Math.round(stats.cost * 1_000_000) / 1_000_000,
+        }))
+        .sort((a, b) => b.cost - a.cost);
+
+      // Budget status (always monthly, always global)
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      let spentThisMonthUsd = 0;
+      // Need global monthly spend (not filtered by user)
+      if (filterUserId) {
+        const { data: monthRows } = await supabaseAdmin
+          .from("api_usage")
+          .select("estimated_cost_usd")
+          .gte("created_at", monthStart);
+        (monthRows || []).forEach((r) => {
+          spentThisMonthUsd += Number(r.estimated_cost_usd) || 0;
+        });
+      } else {
+        (rows || []).forEach((row) => {
+          if (row.created_at >= monthStart) {
+            spentThisMonthUsd += Number(row.estimated_cost_usd) || 0;
+          }
+        });
+      }
+      const { data: budgetRow } = await supabaseAdmin
+        .from("usage_limits")
+        .select("value")
+        .eq("key", "monthly_budget_usd")
+        .single();
+      const monthlyBudgetUsd = parseFloat(budgetRow?.value) || 500;
+      const percentUsed =
+        monthlyBudgetUsd > 0
+          ? Math.round((spentThisMonthUsd / monthlyBudgetUsd) * 10000) / 100
+          : 0;
+
+      // Average cost per day (for the filtered period)
+      const dayCount = Object.keys(dailyMap).length || 1;
+      const avgCostPerDay = totalCost / dayCount;
+
       return res.json({
         period: period || "month",
+        filterUserId: filterUserId || null,
         totalCost: Math.round(totalCost * 1_000_000) / 1_000_000,
         totalCalls,
         successfulCalls,
-        totalPromptTokens,
-        totalCandidatesTokens,
         totalOutputImages,
+        avgCostPerDay: Math.round(avgCostPerDay * 1_000_000) / 1_000_000,
         daily,
         perUser,
+        perMode,
+        allUsers,
+        globalDailyLimit,
+        budgetStatus: {
+          monthlyBudgetUsd,
+          spentThisMonthUsd:
+            Math.round(spentThisMonthUsd * 1_000_000) / 1_000_000,
+          percentUsed,
+        },
       });
     } catch (err) {
       return res.status(500).json({
@@ -985,6 +1122,7 @@ app.post(
   "/api/generate",
   requireAuth,
   requireActiveProfile,
+  checkQuota,
   async (req, res) => {
     if (!ensureSupabase(res)) return;
     if (!apiKey) {
@@ -1000,11 +1138,18 @@ app.post(
       numImages,
       imageConfig,
       mode,
-      projectId,
     } = req.body || {};
 
-    if (!baseImage?.data || !baseImage?.mimeType) {
+    const isCreateMode = mode === "create";
+
+    if (!isCreateMode && (!baseImage?.data || !baseImage?.mimeType)) {
       return res.status(400).json({ error: "Image principale manquante." });
+    }
+
+    if (isCreateMode && (!prompt || !prompt.trim())) {
+      return res
+        .status(400)
+        .json({ error: "Le prompt est obligatoire en mode Créer." });
     }
 
     const safeCount = clamp(Number.parseInt(numImages, 10) || 1, 1, 4);
@@ -1021,7 +1166,14 @@ app.post(
       const normalizedImageConfig = normalizeImageConfig(imageConfig);
       const generationConfig = buildGenerationConfig(normalizedImageConfig);
 
-      const inputImageCount = 1 + inspirations.length;
+      const safeBaseImage =
+        baseImage?.data && baseImage?.mimeType ? baseImage : null;
+      const inputImageCount = (safeBaseImage ? 1 : 0) + inspirations.length;
+      const activeSystemInstruction = isCreateMode
+        ? CREATE_SYSTEM_INSTRUCTION
+        : SYSTEM_INSTRUCTION;
+
+      const STAGGER_DELAY_MS = 1500; // delay between sequential API calls to avoid rate limits
 
       const runBatch = async (count, config, offset, isFallback = false) => {
         const safeOffset = Number.isInteger(offset) ? offset : 0;
@@ -1029,52 +1181,52 @@ app.post(
           config?.imageConfig?.imageSize ||
           normalizedImageConfig?.imageSize ||
           "1K";
-        const tasks = Array.from({ length: count }, (_, index) =>
-          callGemini({
-            parts: buildParts({
-              baseImage,
-              inspirations,
-              prompt,
-              count: safeCount,
-              variantIndex: safeOffset + index + 1,
-              variantTotal: safeCount,
-              mode,
-            }),
-            generationConfig: config,
-          }),
-        );
-        const results = await Promise.allSettled(tasks);
         const batchImages = [];
         const batchErrors = [];
         let batchCostUsd = 0;
 
-        results.forEach((result) => {
-          if (result.status === "fulfilled") {
-            const imgs = result.value.images;
+        for (let index = 0; index < count; index++) {
+          // Stagger calls to avoid hitting rate limits
+          if (index > 0) await sleep(STAGGER_DELAY_MS);
+
+          try {
+            const result = await callGemini({
+              parts: buildParts({
+                baseImage: safeBaseImage,
+                inspirations,
+                prompt,
+                count: safeCount,
+                variantIndex: safeOffset + index + 1,
+                variantTotal: safeCount,
+                mode,
+              }),
+              generationConfig: config,
+              systemInstruction: activeSystemInstruction,
+              endpoint: isCreateMode ? GEMINI_CREATE_ENDPOINT : GEMINI_ENDPOINT,
+            });
+            const imgs = result.images;
             batchImages.push(...imgs);
             const cost = calculateCostUsd({
-              promptTokenCount: result.value.usage?.promptTokenCount,
-              candidatesTokenCount: result.value.usage?.candidatesTokenCount,
+              promptTokenCount: result.usage?.promptTokenCount,
+              candidatesTokenCount: result.usage?.candidatesTokenCount,
               outputImageCount: imgs.length,
               imageSize: batchImageSize,
             });
             if (cost) batchCostUsd += cost;
             logApiUsage({
               userId: req.user.id,
-              projectId,
               mode,
               imageSize: batchImageSize,
               inputImageCount,
               outputImageCount: imgs.length,
-              usage: result.value.usage,
+              usage: result.usage,
               isFallback,
               success: true,
             });
-          } else {
-            batchErrors.push(result.reason);
+          } catch (err) {
+            batchErrors.push(err);
             logApiUsage({
               userId: req.user.id,
-              projectId,
               mode,
               imageSize: batchImageSize,
               inputImageCount,
@@ -1084,7 +1236,7 @@ app.post(
               success: false,
             });
           }
-        });
+        }
 
         return { batchImages, batchErrors, batchCostUsd };
       };
@@ -1118,45 +1270,11 @@ app.post(
       images = images.slice(0, safeCount);
 
       if (images.length === 0) {
-        return res.status(502).json({
-          error: "Aucune image générée. Réessaie avec un prompt plus précis.",
+        const noImageResponse = buildNoImageResponse(errors);
+        return res.status(noImageResponse.status).json({
+          error: noImageResponse.message,
           errors,
         });
-      }
-
-      const storedImages = [];
-      const storageErrors = [];
-      const storageTasks = images.map(async (image) => {
-        const storagePath = await uploadToSupabase({
-          image,
-          userId: req.user.id,
-        });
-        return insertImageRow({
-          image,
-          storagePath,
-          userId: req.user.id,
-          mode,
-          prompt,
-          projectId,
-        });
-      });
-
-      const storageResults = await Promise.allSettled(storageTasks);
-      const storedRows = [];
-      storageResults.forEach((result) => {
-        if (result.status === "fulfilled") {
-          storedRows.push(result.value);
-        } else {
-          storageErrors.push(result.reason?.message || "Stockage échoué.");
-        }
-      });
-
-      if (storedRows.length > 0) {
-        try {
-          storedImages.push(...(await signImageRows(storedRows)));
-        } catch (signError) {
-          storageErrors.push("Signature des liens impossible.");
-        }
       }
 
       if (images.length < safeCount) {
@@ -1167,21 +1285,16 @@ app.post(
       if (errors.length > 0) {
         warnings.push("Certaines tentatives ont echoue, consulte les details.");
       }
-      if (storageErrors.length > 0) {
-        warnings.push("Certaines images n'ont pas pu être sauvegardées.");
-      }
 
       const generationCostEur =
         Math.round(generationCostUsd * USD_TO_EUR * 100) / 100;
 
       return res.json({
         images,
-        stored: storedImages,
         requested: safeCount,
         received: images.length,
         warnings,
         errors,
-        storageErrors,
         estimatedCostEur: generationCostEur,
       });
     } catch (error) {
@@ -1190,447 +1303,6 @@ app.post(
         details: error?.message ? [error.message] : [],
       });
     }
-  },
-);
-
-// ============================================
-// PROJECTS API
-// ============================================
-
-// GET /api/projects - Liste des projets de l'utilisateur
-app.get(
-  "/api/projects",
-  requireAuth,
-  requireActiveProfile,
-  async (req, res) => {
-    const { data, error } = await supabaseAdmin
-      .from("projects")
-      .select(
-        "id, name, prompt, base_image_storage_path, base_image_mime_type, created_at, updated_at",
-      )
-      .eq("user_id", req.user.id)
-      .order("updated_at", { ascending: false });
-
-    if (error) {
-      return res
-        .status(500)
-        .json({ error: "Impossible de charger les projets." });
-    }
-
-    // Signer les URLs des images de base
-    const projectsWithUrls = await Promise.all(
-      (data || []).map(async (project) => {
-        let baseImageUrl = null;
-        if (project.base_image_storage_path) {
-          try {
-            const { data: signedData } = await supabaseAdmin.storage
-              .from(supabaseBucket)
-              .createSignedUrl(project.base_image_storage_path, 60 * 60);
-            baseImageUrl = signedData?.signedUrl || null;
-          } catch (e) {
-            baseImageUrl = null;
-          }
-        }
-        return {
-          id: project.id,
-          name: project.name,
-          prompt: project.prompt,
-          baseImageUrl,
-          createdAt: project.created_at,
-          updatedAt: project.updated_at,
-        };
-      }),
-    );
-
-    return res.json({ projects: projectsWithUrls });
-  },
-);
-
-// GET /api/projects/:id - Charger un projet complet
-app.get(
-  "/api/projects/:id",
-  requireAuth,
-  requireActiveProfile,
-  async (req, res) => {
-    const projectId = req.params.id;
-
-    // Récupérer le projet
-    const { data: project, error: projectError } = await supabaseAdmin
-      .from("projects")
-      .select("*")
-      .eq("id", projectId)
-      .eq("user_id", req.user.id)
-      .single();
-
-    if (projectError || !project) {
-      return res.status(404).json({ error: "Projet introuvable." });
-    }
-
-    // Récupérer les inspirations
-    const { data: inspirations } = await supabaseAdmin
-      .from("project_inspirations")
-      .select("id, storage_path, mime_type, position")
-      .eq("project_id", projectId)
-      .order("position", { ascending: true });
-
-    // Récupérer les images générées
-    const { data: generatedImages } = await supabaseAdmin
-      .from("images")
-      .select("id, created_at, storage_path, mime_type, mode, prompt")
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: true });
-
-    // Signer l'URL de l'image de base
-    let baseImageUrl = null;
-    if (project.base_image_storage_path) {
-      try {
-        const { data: signedData } = await supabaseAdmin.storage
-          .from(supabaseBucket)
-          .createSignedUrl(project.base_image_storage_path, 60 * 60);
-        baseImageUrl = signedData?.signedUrl || null;
-      } catch (e) {
-        baseImageUrl = null;
-      }
-    }
-
-    // Signer les URLs des inspirations
-    let signedInspirations = [];
-    if (inspirations && inspirations.length > 0) {
-      try {
-        const paths = inspirations.map((i) => i.storage_path);
-        const { data: signedData } = await supabaseAdmin.storage
-          .from(supabaseBucket)
-          .createSignedUrls(paths, 60 * 60);
-        const urlMap = new Map(
-          (signedData || []).map((entry) => [entry.path, entry.signedUrl]),
-        );
-        signedInspirations = inspirations.map((i) => ({
-          id: i.id,
-          position: i.position,
-          mimeType: i.mime_type,
-          url: urlMap.get(i.storage_path) || null,
-        }));
-      } catch (e) {
-        signedInspirations = inspirations.map((i) => ({
-          id: i.id,
-          position: i.position,
-          mimeType: i.mime_type,
-          url: null,
-        }));
-      }
-    }
-
-    // Signer les URLs des images générées
-    let signedGeneratedImages = [];
-    try {
-      signedGeneratedImages = await signImageRows(generatedImages || []);
-    } catch (e) {
-      signedGeneratedImages = [];
-    }
-
-    return res.json({
-      project: {
-        id: project.id,
-        name: project.name,
-        prompt: project.prompt,
-        baseImageUrl,
-        baseMimeType: project.base_image_mime_type,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
-      },
-      inspirations: signedInspirations,
-      generatedImages: signedGeneratedImages,
-    });
-  },
-);
-
-// POST /api/projects - Créer un nouveau projet
-app.post(
-  "/api/projects",
-  requireAuth,
-  requireActiveProfile,
-  async (req, res) => {
-    const { name } = req.body || {};
-    const safeName = String(name || "Nouveau projet")
-      .trim()
-      .slice(0, 100);
-
-    const { data, error } = await supabaseAdmin
-      .from("projects")
-      .insert({
-        user_id: req.user.id,
-        name: safeName,
-      })
-      .select("id, name, created_at, updated_at")
-      .single();
-
-    if (error) {
-      return res.status(500).json({ error: "Impossible de créer le projet." });
-    }
-
-    return res.json({ project: data });
-  },
-);
-
-// PATCH /api/projects/:id - Mettre à jour un projet
-app.patch(
-  "/api/projects/:id",
-  requireAuth,
-  requireActiveProfile,
-  async (req, res) => {
-    const projectId = req.params.id;
-    const { name, prompt, baseImage } = req.body || {};
-
-    // Vérifier la propriété
-    const { data: existing } = await supabaseAdmin
-      .from("projects")
-      .select("id, base_image_storage_path")
-      .eq("id", projectId)
-      .eq("user_id", req.user.id)
-      .single();
-
-    if (!existing) {
-      return res.status(404).json({ error: "Projet introuvable." });
-    }
-
-    const updates = {};
-    if (name !== undefined) updates.name = String(name).trim().slice(0, 100);
-    if (prompt !== undefined) updates.prompt = String(prompt).slice(0, 10000);
-
-    // Gérer l'upload de l'image de base
-    if (baseImage && baseImage.data) {
-      // Supprimer l'ancienne image si elle existe
-      if (existing.base_image_storage_path) {
-        try {
-          await supabaseAdmin.storage
-            .from(supabaseBucket)
-            .remove([existing.base_image_storage_path]);
-        } catch (e) {
-          // Ignorer les erreurs de suppression
-        }
-      }
-
-      // Uploader la nouvelle image
-      const extension = resolveImageExtension(baseImage.mimeType);
-      const storagePath = `${req.user.id}/projects/${projectId}/base.${extension}`;
-      const buffer = Buffer.from(baseImage.data, "base64");
-
-      const { error: uploadError } = await supabaseAdmin.storage
-        .from(supabaseBucket)
-        .upload(storagePath, buffer, {
-          contentType: baseImage.mimeType || "image/png",
-          upsert: true,
-        });
-
-      if (uploadError) {
-        return res
-          .status(500)
-          .json({ error: "Impossible d'uploader l'image." });
-      }
-
-      updates.base_image_storage_path = storagePath;
-      updates.base_image_mime_type = baseImage.mimeType || "image/png";
-    }
-
-    if (Object.keys(updates).length > 0) {
-      const { error } = await supabaseAdmin
-        .from("projects")
-        .update(updates)
-        .eq("id", projectId);
-
-      if (error) {
-        return res.status(500).json({ error: "Mise à jour impossible." });
-      }
-    }
-
-    return res.json({ success: true });
-  },
-);
-
-// DELETE /api/projects/:id - Supprimer un projet
-app.delete(
-  "/api/projects/:id",
-  requireAuth,
-  requireActiveProfile,
-  async (req, res) => {
-    const projectId = req.params.id;
-
-    // Vérifier la propriété et récupérer les chemins pour nettoyage
-    const { data: project } = await supabaseAdmin
-      .from("projects")
-      .select("id, base_image_storage_path")
-      .eq("id", projectId)
-      .eq("user_id", req.user.id)
-      .single();
-
-    if (!project) {
-      return res.status(404).json({ error: "Projet introuvable." });
-    }
-
-    // Récupérer les chemins des inspirations
-    const { data: inspirations } = await supabaseAdmin
-      .from("project_inspirations")
-      .select("storage_path")
-      .eq("project_id", projectId);
-
-    // Supprimer les fichiers du storage
-    const pathsToDelete = [];
-    if (project.base_image_storage_path) {
-      pathsToDelete.push(project.base_image_storage_path);
-    }
-    (inspirations || []).forEach((insp) => {
-      if (insp.storage_path) pathsToDelete.push(insp.storage_path);
-    });
-
-    if (pathsToDelete.length > 0) {
-      try {
-        await supabaseAdmin.storage.from(supabaseBucket).remove(pathsToDelete);
-      } catch (e) {
-        // Ignorer les erreurs de suppression storage
-      }
-    }
-
-    // Supprimer le projet (cascade vers inspirations, nullify images.project_id)
-    const { error } = await supabaseAdmin
-      .from("projects")
-      .delete()
-      .eq("id", projectId);
-
-    if (error) {
-      return res.status(500).json({ error: "Suppression impossible." });
-    }
-
-    return res.json({ success: true });
-  },
-);
-
-// POST /api/projects/:id/inspirations - Ajouter une inspiration
-app.post(
-  "/api/projects/:id/inspirations",
-  requireAuth,
-  requireActiveProfile,
-  async (req, res) => {
-    const projectId = req.params.id;
-    const { image, position } = req.body || {};
-
-    if (!image || !image.data) {
-      return res.status(400).json({ error: "Image requise." });
-    }
-
-    // Vérifier la propriété
-    const { data: project } = await supabaseAdmin
-      .from("projects")
-      .select("id")
-      .eq("id", projectId)
-      .eq("user_id", req.user.id)
-      .single();
-
-    if (!project) {
-      return res.status(404).json({ error: "Projet introuvable." });
-    }
-
-    // Vérifier le nombre d'inspirations existantes
-    const { data: existing } = await supabaseAdmin
-      .from("project_inspirations")
-      .select("id")
-      .eq("project_id", projectId);
-
-    if ((existing || []).length >= 4) {
-      return res
-        .status(400)
-        .json({ error: "Maximum 4 inspirations par projet." });
-    }
-
-    // Uploader vers le storage
-    const safePosition = Math.min(Math.max(0, Number(position) || 0), 3);
-    const extension = resolveImageExtension(image.mimeType);
-    const storagePath = `${req.user.id}/projects/${projectId}/inspiration-${safePosition}-${Date.now()}.${extension}`;
-    const buffer = Buffer.from(image.data, "base64");
-
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from(supabaseBucket)
-      .upload(storagePath, buffer, {
-        contentType: image.mimeType || "image/png",
-        upsert: false,
-      });
-
-    if (uploadError) {
-      return res
-        .status(500)
-        .json({ error: "Impossible d'uploader l'inspiration." });
-    }
-
-    // Insérer l'enregistrement
-    const { data, error } = await supabaseAdmin
-      .from("project_inspirations")
-      .insert({
-        project_id: projectId,
-        storage_path: storagePath,
-        mime_type: image.mimeType || "image/png",
-        position: safePosition,
-      })
-      .select("id, storage_path, mime_type, position")
-      .single();
-
-    if (error) {
-      return res
-        .status(500)
-        .json({ error: "Impossible d'ajouter l'inspiration." });
-    }
-
-    return res.json({ inspiration: data });
-  },
-);
-
-// DELETE /api/projects/:projectId/inspirations/:inspirationId - Supprimer une inspiration
-app.delete(
-  "/api/projects/:projectId/inspirations/:inspirationId",
-  requireAuth,
-  requireActiveProfile,
-  async (req, res) => {
-    const { projectId, inspirationId } = req.params;
-
-    // Récupérer l'inspiration
-    const { data: inspiration } = await supabaseAdmin
-      .from("project_inspirations")
-      .select("id, storage_path, project_id")
-      .eq("id", inspirationId)
-      .single();
-
-    if (!inspiration) {
-      return res.status(404).json({ error: "Inspiration introuvable." });
-    }
-
-    // Vérifier la propriété via le projet
-    const { data: project } = await supabaseAdmin
-      .from("projects")
-      .select("id")
-      .eq("id", inspiration.project_id)
-      .eq("user_id", req.user.id)
-      .single();
-
-    if (!project) {
-      return res.status(403).json({ error: "Accès non autorisé." });
-    }
-
-    // Supprimer du storage
-    if (inspiration.storage_path) {
-      try {
-        await supabaseAdmin.storage
-          .from(supabaseBucket)
-          .remove([inspiration.storage_path]);
-      } catch (e) {
-        // Ignorer les erreurs
-      }
-    }
-
-    // Supprimer l'enregistrement
-    await supabaseAdmin
-      .from("project_inspirations")
-      .delete()
-      .eq("id", inspirationId);
-
-    return res.json({ success: true });
   },
 );
 
