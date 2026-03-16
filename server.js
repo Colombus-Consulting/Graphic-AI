@@ -30,9 +30,11 @@ app.use(express.static("public"));
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent";
 const GEMINI_CREATE_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent";
+const GEMINI_FALLBACK_ENDPOINT =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
 const VALID_ASPECT_RATIOS = new Set([
   "1:1",
   "2:3",
@@ -285,7 +287,6 @@ const buildParts = ({
         mime_type: baseImage.mimeType,
         data: baseImage.data,
       },
-      media_resolution: { level: "MEDIA_RESOLUTION_HIGH" },
     });
   }
 
@@ -303,7 +304,6 @@ const buildParts = ({
           mime_type: image.mimeType,
           data: image.data,
         },
-        media_resolution: { level: "MEDIA_RESOLUTION_MEDIUM" },
       });
     });
   }
@@ -1189,7 +1189,7 @@ app.post(
         try { res.write(JSON.stringify({ type: "progress", ...evt }) + "\n"); } catch (_) {}
       };
 
-      const runBatch = async (count, config, offset, isFallback = false) => {
+      const runBatch = async (count, config, offset, isFallback = false, endpointOverride = null) => {
         const safeOffset = Number.isInteger(offset) ? offset : 0;
         const batchImageSize =
           config?.imageConfig?.imageSize ||
@@ -1219,7 +1219,7 @@ app.post(
               }),
               generationConfig: config,
               systemInstruction: activeSystemInstruction,
-              endpoint: isCreateMode ? GEMINI_CREATE_ENDPOINT : GEMINI_ENDPOINT,
+              endpoint: endpointOverride || (isCreateMode ? GEMINI_CREATE_ENDPOINT : GEMINI_ENDPOINT),
               onProgress: (evt) => onProgress({ ...evt, variantIndex: variantNum, variantTotal: safeCount }),
               label: `${reqId}:v${variantNum}${isFallback ? ":fb" : ""}`,
             });
@@ -1269,7 +1269,9 @@ app.post(
       errors.push(...batch.batchErrors);
       generationCostUsd += batch.batchCostUsd || 0;
 
-      const missingAfterPrimary = safeCount - images.length;
+      let missingAfterPrimary = safeCount - images.length;
+
+      // Fallback 1: imageConfig error → retry without imageConfig
       if (
         missingAfterPrimary > 0 &&
         batch.batchErrors.some(isImageConfigError)
@@ -1282,6 +1284,29 @@ app.post(
           fallbackConfig,
           offset,
           true,
+        );
+        images = images.concat(batch.batchImages);
+        errors.push(...batch.batchErrors);
+        generationCostUsd += batch.batchCostUsd || 0;
+        missingAfterPrimary = safeCount - images.length;
+      }
+
+      // Fallback 2: all transient errors → retry with stable model (gemini-2.5-flash-image)
+      if (
+        missingAfterPrimary > 0 &&
+        batch.batchErrors.length > 0 &&
+        batch.batchErrors.every(isTransientGenerationError)
+      ) {
+        console.log(`[${reqId}] primary model unavailable, falling back to gemini-2.5-flash-image`);
+        onProgress({ event: "fallback", model: "gemini-2.5-flash-image" });
+        warnings.push("Modèle principal indisponible, utilisation du modèle de secours.");
+        const offset = safeCount - missingAfterPrimary;
+        batch = await runBatch(
+          missingAfterPrimary,
+          generationConfig,
+          offset,
+          true,
+          GEMINI_FALLBACK_ENDPOINT,
         );
         images = images.concat(batch.batchImages);
         errors.push(...batch.batchErrors);

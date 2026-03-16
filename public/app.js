@@ -267,6 +267,9 @@ const formatProgressMessage = (event) => {
     const label = event.variantIndex ? `variante ${event.variantIndex}/${event.variantTotal}` : "image";
     return `Erreur API (${event.status}), nouvelle tentative ${event.attempt}/${event.maxAttempts} pour ${label}...`;
   }
+  if (event.event === "fallback") {
+    return "Modèle principal indisponible, basculement sur le modèle de secours...";
+  }
   return "Génération en cours...";
 };
 
