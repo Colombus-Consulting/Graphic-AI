@@ -1333,7 +1333,7 @@ const generateImages = async () => {
   );
 
   setStatus("Génération en cours...", "");
-  const loadingCards = replaceWithLoading(selectedCount || 1);
+  const loadingCards = addLoading(selectedCount || 1);
   generateBtn.disabled = true;
   generateBtn.textContent = "Génération...";
 
@@ -1365,7 +1365,6 @@ const generateImages = async () => {
     if (response.status === 429) {
       const data = await response.json();
       clearLoading(loadingCards);
-      resultsGrid.innerHTML = "";
       loadQuota();
       setStatus(data?.error || "Limite quotidienne atteinte.", "quota");
       return;
@@ -1385,7 +1384,6 @@ const generateImages = async () => {
       }
       setStatus(data?.error || "Erreur lors de la génération.", "error", details);
       clearLoading(loadingCards);
-      resultsGrid.innerHTML = "";
       return;
     }
 
@@ -1396,7 +1394,6 @@ const generateImages = async () => {
     if (!data) {
       setStatus("Erreur : aucune réponse du serveur.", "error");
       clearLoading(loadingCards);
-      resultsGrid.innerHTML = "";
       return;
     }
 
@@ -1418,12 +1415,11 @@ const generateImages = async () => {
         details,
       );
       clearLoading(loadingCards);
-      resultsGrid.innerHTML = "";
       return;
     }
 
     clearLoading(loadingCards);
-    renderResults(data.images);
+    appendResults(data.images);
     if (data.estimatedCostEur) {
       updateMonthlyCostDisplay(currentMonthlyCostEur + data.estimatedCostEur);
     }
@@ -1443,7 +1439,6 @@ const generateImages = async () => {
     setStatus(message, type, warnings);
   } catch (error) {
     clearLoading(loadingCards);
-    resultsGrid.innerHTML = "";
     setStatus("Erreur réseau pendant la génération.", "error", [
       error?.message || "Réseau indisponible.",
     ]);
@@ -1591,7 +1586,7 @@ const generateCreate = async () => {
   if (createResultsGrid) createResultsGrid.classList.add("loading-grid");
   const loadingCards = [];
   if (createResultsGrid) {
-    createResultsGrid.innerHTML = "";
+    createResultsGrid.classList.add("loading-grid");
     for (let i = 0; i < (selectedCount || 1); i += 1) {
       const card = document.createElement("div");
       card.className = "result-card loading";
@@ -1640,10 +1635,7 @@ const generateCreate = async () => {
     if (response.status === 429) {
       const data = await response.json();
       loadingCards.forEach((c) => c.remove());
-      if (createResultsGrid) {
-        createResultsGrid.classList.remove("loading-grid");
-        createResultsGrid.innerHTML = "";
-      }
+      if (createResultsGrid && !createResultsGrid.querySelector(".result-card:not(.loading)")) createResultsGrid.classList.remove("loading-grid");
       loadQuota();
       setCreateStatus(data?.error || "Limite quotidienne atteinte.", "quota");
       return;
@@ -1663,10 +1655,7 @@ const generateCreate = async () => {
       }
       setCreateStatus(data?.error || "Erreur lors de la génération.", "error", details);
       loadingCards.forEach((c) => c.remove());
-      if (createResultsGrid) {
-        createResultsGrid.classList.remove("loading-grid");
-        createResultsGrid.innerHTML = "";
-      }
+      if (createResultsGrid && !createResultsGrid.querySelector(".result-card:not(.loading)")) createResultsGrid.classList.remove("loading-grid");
       return;
     }
 
@@ -1692,19 +1681,16 @@ const generateCreate = async () => {
         details,
       );
       loadingCards.forEach((c) => c.remove());
-      if (createResultsGrid) {
-        createResultsGrid.classList.remove("loading-grid");
-        createResultsGrid.innerHTML = "";
-      }
+      if (createResultsGrid && !createResultsGrid.querySelector(".result-card:not(.loading)")) createResultsGrid.classList.remove("loading-grid");
       return;
     }
 
     loadingCards.forEach((c) => c.remove());
     if (createResultsGrid) {
       createResultsGrid.classList.remove("loading-grid");
-      createResultsGrid.innerHTML = "";
+      const currentCount = createResultsGrid.querySelectorAll(".result-card:not(.loading)").length;
       data.images.forEach((image, index) => {
-        createResultsGrid.appendChild(createResultCard(image, index));
+        createResultsGrid.appendChild(createResultCard(image, currentCount + index));
       });
     }
     if (data.estimatedCostEur) {
@@ -1727,10 +1713,7 @@ const generateCreate = async () => {
     setCreateStatus(message, type, warnings);
   } catch (error) {
     loadingCards.forEach((c) => c.remove());
-    if (createResultsGrid) {
-      createResultsGrid.classList.remove("loading-grid");
-      createResultsGrid.innerHTML = "";
-    }
+    if (createResultsGrid && !createResultsGrid.querySelector(".result-card:not(.loading)")) createResultsGrid.classList.remove("loading-grid");
     setCreateStatus("Erreur réseau pendant la génération.", "error", [
       error?.message || "Réseau indisponible.",
     ]);
