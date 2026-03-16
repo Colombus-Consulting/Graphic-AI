@@ -1204,6 +1204,7 @@ app.post(
           if (index > 0) await sleep(STAGGER_DELAY_MS);
 
           onProgress({ event: "variant", index: safeOffset + index + 1, total: safeCount });
+          console.log(`[${reqId}] variant ${safeOffset + index + 1}/${safeCount} start`);
 
           try {
             const result = await callGemini({
@@ -1223,6 +1224,7 @@ app.post(
               label: `${reqId}:v${safeOffset + index + 1}${isFallback ? ":fb" : ""}`,
             });
             const imgs = result.images;
+            console.log(`[${reqId}] variant ${safeOffset + index + 1}/${safeCount} ok, ${imgs.length} image(s)`);
             batchImages.push(...imgs);
             const cost = calculateCostUsd({
               promptTokenCount: result.usage?.promptTokenCount,
@@ -1242,6 +1244,7 @@ app.post(
               success: true,
             });
           } catch (err) {
+            console.log(`[${reqId}] variant ${safeOffset + index + 1}/${safeCount} error: ${err?.status} ${err?.message}`);
             batchErrors.push(err);
             logApiUsage({
               userId: req.user.id,
@@ -1288,6 +1291,7 @@ app.post(
       images = images.slice(0, safeCount);
 
       if (images.length === 0) {
+        console.log(`[${reqId}] done: 0 images, ${errors.length} errors`);
         const noImageResponse = buildNoImageResponse(errors);
         res.write(JSON.stringify({ type: "result", ok: false, status: noImageResponse.status, error: noImageResponse.message, errors }) + "\n");
         return res.end();
@@ -1305,6 +1309,7 @@ app.post(
       const generationCostEur =
         Math.round(generationCostUsd * USD_TO_EUR * 100) / 100;
 
+      console.log(`[${reqId}] done: ${images.length} images, ${errors.length} errors, ${generationCostEur}€`);
       res.write(JSON.stringify({
         type: "result",
         ok: true,

@@ -186,43 +186,74 @@ const authorizedFetch = async (url, options = {}) => {
   return fetch(url, { ...options, headers });
 };
 
+/** Parse NDJSON text and extract result + call onProgress for progress events. */
+const parseNdjson = (text, onProgress) => {
+  let result = null;
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const event = JSON.parse(trimmed);
+      if (event.type === "progress" && onProgress) onProgress(event);
+      else if (event.type === "result") result = event;
+    } catch (_) {}
+  }
+  return result;
+};
+
 /**
  * Reads an NDJSON stream from a generate response.
- * Calls onProgress for each progress event and returns the final result event.
+ * Falls back to reading the full body as text if streaming is unavailable.
+ * Includes a 5-minute timeout to prevent infinite loading.
  */
 const readGenerateStream = async (response, onProgress) => {
+  const TIMEOUT_MS = 5 * 60 * 1000;
+
+  // Fallback: no streaming support — read entire body as text
+  if (!response.body || typeof response.body.getReader !== "function") {
+    const text = await response.text();
+    return parseNdjson(text, onProgress);
+  }
+
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let result = null;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS),
+  );
 
-    const lines = buffer.split("\n");
-    buffer = lines.pop();
+  try {
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), timeout]);
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const event = JSON.parse(trimmed);
+          if (event.type === "progress" && onProgress) onProgress(event);
+          else if (event.type === "result") result = event;
+        } catch (_) {}
+      }
+    }
+
+    if (buffer.trim()) {
       try {
-        const event = JSON.parse(trimmed);
-        if (event.type === "progress") {
-          if (onProgress) onProgress(event);
-        } else if (event.type === "result") {
-          result = event;
-        }
+        const event = JSON.parse(buffer.trim());
+        if (event.type === "result") result = event;
       } catch (_) {}
     }
-  }
-
-  if (buffer.trim()) {
-    try {
-      const event = JSON.parse(buffer.trim());
-      if (event.type === "result") result = event;
-    } catch (_) {}
+  } catch (err) {
+    try { reader.cancel(); } catch (_) {}
+    if (err.message === "timeout") return null;
+    throw err;
   }
 
   return result;
