@@ -32,7 +32,7 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const GEMINI_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent";
 const GEMINI_CREATE_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3.1-flash-image-preview:generateContent";
+  "https://generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent";
 const VALID_ASPECT_RATIOS = new Set([
   "1:1",
   "2:3",
