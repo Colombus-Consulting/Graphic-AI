@@ -32,7 +32,7 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const GEMINI_BASE_URL =
   "https://generativelanguage.googleapis.com/v1beta/models";
 const PRIMARY_MODEL = "gemini-3-pro-image-preview";
-const FALLBACK_MODEL = "gemini-3.1-flash-image-preview";
+const FALLBACK_MODEL = "gemini-2.5-flash-image";
 const geminiEndpoint = (model = PRIMARY_MODEL) =>
   `${GEMINI_BASE_URL}/${model}:generateContent`;
 const VALID_ASPECT_RATIOS = new Set([
@@ -1388,7 +1388,7 @@ app.post(
       images = images.slice(0, safeCount);
 
       if (usedFallbackModel && images.length > 0) {
-        warnings.push("Modèle principal indisponible — image générée avec le modèle de secours (qualité équivalente, modèle plus rapide).");
+        warnings.push("Modèle principal indisponible — image générée avec le modèle de secours (résolution max 1024×1024).");
       }
 
       if (images.length === 0) {
