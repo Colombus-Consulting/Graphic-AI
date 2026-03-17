@@ -29,10 +29,12 @@ app.use(express.json({ limit: "35mb" }));
 app.use(express.static("public"));
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent";
-const GEMINI_CREATE_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent";
+const GEMINI_BASE_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models";
+const PRIMARY_MODEL = "gemini-3-pro-image-preview";
+const FALLBACK_MODEL = "gemini-3.1-flash-image-preview";
+const geminiEndpoint = (model = PRIMARY_MODEL) =>
+  `${GEMINI_BASE_URL}/${model}:generateContent`;
 const VALID_ASPECT_RATIOS = new Set([
   "1:1",
   "2:3",
@@ -552,17 +554,39 @@ const buildNoImageResponse = (errors) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpoint, maxRetries = 3, onProgress, label = "" }) => {
-  const body = {
-    system_instruction: systemInstruction || SYSTEM_INSTRUCTION,
-    contents: [
-      {
-        parts,
-      },
-    ],
-    generationConfig,
-  };
+// ---------- Circuit breaker for the primary model ----------
+const circuitBreaker = {
+  failures: [],          // timestamps of recent consecutive 503s
+  tripped: false,
+  trippedAt: 0,
+  THRESHOLD: 3,          // trip after N consecutive transient failures
+  WINDOW_MS: 60_000,     // within this time window
+  COOLDOWN_MS: 300_000,  // stay tripped for 5 minutes
+  record(failed) {
+    if (!failed) { this.failures = []; return; }
+    const now = Date.now();
+    this.failures.push(now);
+    this.failures = this.failures.filter((t) => now - t < this.WINDOW_MS);
+    if (this.failures.length >= this.THRESHOLD) {
+      this.tripped = true;
+      this.trippedAt = now;
+      console.log("[circuit-breaker] TRIPPED – skipping primary model for 5 min");
+    }
+  },
+  shouldSkipPrimary() {
+    if (!this.tripped) return false;
+    if (Date.now() - this.trippedAt > this.COOLDOWN_MS) {
+      this.tripped = false;
+      this.failures = [];
+      console.log("[circuit-breaker] RESET – trying primary model again");
+      return false;
+    }
+    return true;
+  },
+};
 
+// Try a single model with retries + exponential backoff
+const callGeminiRawSingleModel = async ({ body, endpoint, maxRetries = 3, onProgress, label = "" }) => {
   const timeoutMs = process.env.VERCEL === "1" ? 55000 : 120000;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -570,7 +594,7 @@ const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpo
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetch(endpoint || GEMINI_ENDPOINT, {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -585,7 +609,7 @@ const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpo
       if (!response.ok) {
         const apiError = buildApiError(data, response.status);
         if (attempt < maxRetries && isTransientGenerationError(apiError)) {
-          const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 8000);
+          const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 15000);
           console.log(`[${label}] Gemini ${response.status} (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
           if (onProgress) onProgress({ event: "retry", attempt: attempt + 1, maxAttempts: maxRetries + 1, status: response.status, delayMs: Math.round(delay) });
           clearTimeout(timeoutId);
@@ -612,7 +636,7 @@ const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpo
         details: Array.isArray(error?.details) ? error.details : [],
       };
       if (attempt < maxRetries && isTransientGenerationError(wrapped)) {
-        const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 8000);
+        const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 15000);
         console.log(`[${label}] Gemini error (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
         if (onProgress) onProgress({ event: "retry", attempt: attempt + 1, maxAttempts: maxRetries + 1, status: wrapped.status, delayMs: Math.round(delay) });
         await sleep(delay);
@@ -625,8 +649,59 @@ const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, endpo
   }
 };
 
-const callGemini = async ({ parts, generationConfig, systemInstruction, endpoint, onProgress, label }) => {
-  const data = await callGeminiRaw({ parts, generationConfig, systemInstruction, endpoint, onProgress, label });
+// Try primary model, then fallback model if primary fails with transient errors
+const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, maxRetries = 3, onProgress, label = "" }) => {
+  const body = {
+    system_instruction: systemInstruction || SYSTEM_INSTRUCTION,
+    contents: [{ parts }],
+    generationConfig,
+  };
+
+  const skipPrimary = circuitBreaker.shouldSkipPrimary();
+  const models = skipPrimary
+    ? [FALLBACK_MODEL]
+    : [PRIMARY_MODEL, FALLBACK_MODEL];
+
+  if (skipPrimary) {
+    console.log(`[${label}] Circuit breaker active – going straight to ${FALLBACK_MODEL}`);
+  }
+
+  let lastError = null;
+  let usedModel = null;
+
+  for (const model of models) {
+    const endpoint = geminiEndpoint(model);
+    usedModel = model;
+
+    try {
+      const data = await callGeminiRawSingleModel({
+        body,
+        endpoint,
+        maxRetries,
+        onProgress,
+        label: `${label}:${model.includes("flash") ? "flash" : "pro"}`,
+      });
+      // Success – update circuit breaker & return
+      if (model === PRIMARY_MODEL) circuitBreaker.record(false);
+      data._usedModel = model;
+      data._usedFallback = model !== PRIMARY_MODEL;
+      return data;
+    } catch (error) {
+      lastError = error;
+      // Record failure for primary model
+      if (model === PRIMARY_MODEL) circuitBreaker.record(true);
+      // Only try next model if this was a transient error
+      if (!isTransientGenerationError(error)) throw error;
+      console.log(`[${label}] ${model} exhausted retries, trying fallback...`);
+      if (onProgress) onProgress({ event: "model-fallback", fromModel: model, toModel: FALLBACK_MODEL });
+    }
+  }
+
+  throw lastError;
+};
+
+const callGemini = async ({ parts, generationConfig, systemInstruction, onProgress, label }) => {
+  const data = await callGeminiRaw({ parts, generationConfig, systemInstruction, onProgress, label });
   const meta = data?.usageMetadata || data?.usage_metadata || null;
   return {
     images: extractImages(data),
@@ -640,6 +715,8 @@ const callGemini = async ({ parts, generationConfig, systemInstruction, endpoint
             meta.totalTokenCount ?? meta.total_token_count ?? null,
         }
       : null,
+    usedFallback: data._usedFallback || false,
+    usedModel: data._usedModel || PRIMARY_MODEL,
   };
 };
 
@@ -1203,7 +1280,9 @@ app.post(
         try { res.write(JSON.stringify({ type: "progress", ...evt }) + "\n"); } catch (_) {}
       };
 
-      const runBatch = async (count, config, offset, isFallback = false, endpointOverride = null) => {
+      let usedFallbackModel = false;
+
+      const runBatch = async (count, config, offset, isFallback = false) => {
         const safeOffset = Number.isInteger(offset) ? offset : 0;
         const batchImageSize =
           config?.imageConfig?.imageSize ||
@@ -1233,12 +1312,12 @@ app.post(
               }),
               generationConfig: config,
               systemInstruction: activeSystemInstruction,
-              endpoint: endpointOverride || (isCreateMode ? GEMINI_CREATE_ENDPOINT : GEMINI_ENDPOINT),
               onProgress: (evt) => onProgress({ ...evt, variantIndex: variantNum, variantTotal: safeCount }),
               label: `${reqId}:v${variantNum}${isFallback ? ":fb" : ""}`,
             });
             const imgs = result.images;
-            console.log(`[${reqId}] variant ${variantNum}/${safeCount} ok, ${imgs.length} image(s)`);
+            if (result.usedFallback) usedFallbackModel = true;
+            console.log(`[${reqId}] variant ${variantNum}/${safeCount} ok (${result.usedModel}), ${imgs.length} image(s)`);
             batchImages.push(...imgs);
             const cost = calculateCostUsd({
               promptTokenCount: result.usage?.promptTokenCount,
@@ -1254,7 +1333,7 @@ app.post(
               inputImageCount,
               outputImageCount: imgs.length,
               usage: result.usage,
-              isFallback,
+              isFallback: isFallback || result.usedFallback,
               success: true,
             });
           } catch (err) {
@@ -1307,6 +1386,10 @@ app.post(
 
 
       images = images.slice(0, safeCount);
+
+      if (usedFallbackModel && images.length > 0) {
+        warnings.push("Modèle principal indisponible — image générée avec le modèle de secours (qualité équivalente, modèle plus rapide).");
+      }
 
       if (images.length === 0) {
         console.log(`[${reqId}] done: 0 images, ${errors.length} errors`);
