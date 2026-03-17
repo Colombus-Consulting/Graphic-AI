@@ -587,7 +587,7 @@ const circuitBreaker = {
 
 // Try a single model with retries + exponential backoff
 const callGeminiRawSingleModel = async ({ body, endpoint, maxRetries = 3, onProgress, label = "" }) => {
-  const timeoutMs = process.env.VERCEL === "1" ? 55000 : 120000;
+  const timeoutMs = process.env.VERCEL === "1" ? 55000 : 180000;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController();
