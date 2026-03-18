@@ -1532,8 +1532,8 @@ input[type="range"] {
 .admin-list-header,
 .admin-user-row {
     display: grid;
-    gap: 8px;
-    grid-template-columns: minmax(160px, 1.5fr) minmax(80px, 0.6fr) minmax(80px, 0.6fr) minmax(120px, 0.8fr);
+    gap: 10px;
+    grid-template-columns: minmax(180px, 2fr) minmax(70px, 0.5fr) minmax(70px, 0.5fr) minmax(110px, 0.7fr);
     align-items: center;
     font-size: 13px;
 }
@@ -1544,13 +1544,37 @@ input[type="range"] {
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-size: 11px;
+    padding: 0 10px;
 }
 
 .admin-user-row {
     background: #f8fafc;
     border: 1px solid hsl(var(--border));
     border-radius: 8px;
-    padding: 8px 10px;
+    padding: 10px 10px;
+    transition: background 0.15s ease;
+}
+
+.admin-user-row:hover {
+    background: #f1f5f9;
+}
+
+.admin-user-inactive {
+    opacity: 0.55;
+}
+
+.admin-user-email {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.admin-user-email-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
 }
 
 .admin-actions {
@@ -1558,6 +1582,67 @@ input[type="range"] {
     gap: 6px;
     flex-wrap: wrap;
     justify-content: flex-start;
+}
+
+.admin-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Role & status badges */
+.badge-role {
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.badge-role:hover {
+    transform: scale(1.05);
+    opacity: 0.85;
+}
+
+.badge-role:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
+.badge-admin {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.badge-member {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.badge-xs {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+}
+
+.badge-active {
+    background: #ecfdf5;
+    color: #065f46;
+}
+
+.badge-inactive {
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.badge-warn {
+    background: #fefce8;
+    color: #854d0e;
+}
+
+.btn-danger-hover:hover {
+    color: #dc2626;
+    border-color: #fecaca;
+    background: #fef2f2;
 }
 
 /* Import section */

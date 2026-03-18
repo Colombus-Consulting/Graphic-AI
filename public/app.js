@@ -871,64 +871,83 @@ const renderAdminUsers = (users = []) => {
   users.forEach((user) => {
     const row = document.createElement("div");
     row.className = "admin-user-row";
+    if (!user.is_active) row.classList.add("admin-user-inactive");
 
-    const email = document.createElement("span");
-    email.textContent = user.email || "—";
+    // Email + date
+    const emailCell = document.createElement("div");
+    emailCell.className = "admin-user-email";
+    const emailText = document.createElement("span");
+    emailText.className = "admin-user-email-text";
+    emailText.textContent = user.email || "—";
+    emailCell.appendChild(emailText);
+    if (user.must_change_password) {
+      const pwdBadge = document.createElement("span");
+      pwdBadge.className = "badge badge-warn badge-xs";
+      pwdBadge.textContent = "MDP à changer";
+      pwdBadge.title = "L'utilisateur n'a pas encore changé son mot de passe par défaut";
+      emailCell.appendChild(pwdBadge);
+    }
 
-    const roleSelect = document.createElement("select");
-    const optionMember = document.createElement("option");
-    optionMember.value = "member";
-    optionMember.textContent = "Member";
-    const optionAdmin = document.createElement("option");
-    optionAdmin.value = "admin";
-    optionAdmin.textContent = "Admin";
-    roleSelect.appendChild(optionMember);
-    roleSelect.appendChild(optionAdmin);
-    roleSelect.value = user.role === "admin" ? "admin" : "member";
+    // Role badge (clickable to toggle)
+    const roleCell = document.createElement("div");
+    const roleBadge = document.createElement("button");
+    roleBadge.type = "button";
+    roleBadge.className = `badge badge-role ${user.role === "admin" ? "badge-admin" : "badge-member"}`;
+    roleBadge.textContent = user.role === "admin" ? "Admin" : "Member";
+    roleBadge.title = "Cliquer pour changer le rôle";
+    roleBadge.addEventListener("click", async () => {
+      const newRole = user.role === "admin" ? "member" : "admin";
+      try {
+        roleBadge.disabled = true;
+        await updateAdminUser(user.id, { role: newRole });
+        user.role = newRole;
+        roleBadge.textContent = newRole === "admin" ? "Admin" : "Member";
+        roleBadge.className = `badge badge-role ${newRole === "admin" ? "badge-admin" : "badge-member"}`;
+        setAdminStatus("Rôle mis à jour.", "ok");
+      } catch (error) {
+        setAdminStatus(error.message || "Erreur.", "error");
+      } finally {
+        roleBadge.disabled = false;
+      }
+    });
+    roleCell.appendChild(roleBadge);
 
-    const status = document.createElement("span");
-    status.textContent = user.is_active ? "Actif" : "Désactivé";
+    // Status badge
+    const statusCell = document.createElement("div");
+    const statusBadge = document.createElement("span");
+    statusBadge.className = `badge badge-xs ${user.is_active ? "badge-active" : "badge-inactive"}`;
+    statusBadge.textContent = user.is_active ? "Actif" : "Désactivé";
+    statusCell.appendChild(statusBadge);
 
+    // Actions with icon buttons and tooltips
     const actions = document.createElement("div");
     actions.className = "admin-actions";
 
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.className = "btn btn-outline btn-sm";
-    saveBtn.textContent = "Mettre à jour";
-    saveBtn.addEventListener("click", async () => {
-      try {
-        setAdminStatus("Mise à jour en cours...");
-        await updateAdminUser(user.id, { role: roleSelect.value });
-        setAdminStatus("Rôle mis à jour.", "ok");
-      } catch (error) {
-        setAdminStatus(error.message || "Erreur de mise à jour.", "error");
-      }
-    });
-
     const toggleBtn = document.createElement("button");
     toggleBtn.type = "button";
-    toggleBtn.className = "btn btn-ghost btn-sm";
-    toggleBtn.textContent = user.is_active ? "Désactiver" : "Réactiver";
+    toggleBtn.className = `btn btn-sm ${user.is_active ? "btn-ghost btn-danger-hover" : "btn-outline"}`;
+    toggleBtn.title = user.is_active ? "Désactiver ce compte" : "Réactiver ce compte";
+    toggleBtn.innerHTML = user.is_active
+      ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Désactiver'
+      : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Réactiver';
     toggleBtn.addEventListener("click", async () => {
       try {
-        setAdminStatus("Mise à jour en cours...");
+        toggleBtn.disabled = true;
         await updateAdminUser(user.id, { is_active: !user.is_active });
         user.is_active = !user.is_active;
-        status.textContent = user.is_active ? "Actif" : "Désactivé";
-        toggleBtn.textContent = user.is_active ? "Désactiver" : "Réactiver";
         setAdminStatus("Statut mis à jour.", "ok");
+        renderAdminUsers(users);
       } catch (error) {
-        setAdminStatus(error.message || "Erreur de mise à jour.", "error");
+        toggleBtn.disabled = false;
+        setAdminStatus(error.message || "Erreur.", "error");
       }
     });
 
-    actions.appendChild(saveBtn);
     actions.appendChild(toggleBtn);
 
-    row.appendChild(email);
-    row.appendChild(roleSelect);
-    row.appendChild(status);
+    row.appendChild(emailCell);
+    row.appendChild(roleCell);
+    row.appendChild(statusCell);
     row.appendChild(actions);
     adminUsers.appendChild(row);
   });
