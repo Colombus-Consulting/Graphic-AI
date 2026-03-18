@@ -62,6 +62,8 @@ const forcePasswordForm = document.querySelector("#forcePasswordForm");
 const forceNewPasswordInput = document.querySelector("#forceNewPassword");
 const forceConfirmPasswordInput = document.querySelector("#forceConfirmPassword");
 const forcePasswordError = document.querySelector("#forcePasswordError");
+const adminUserSearch = document.querySelector("#adminUserSearch");
+const adminUserCount = document.querySelector("#adminUserCount");
 const usagePeriod = document.querySelector("#usagePeriod");
 const usageUserFilter = document.querySelector("#usageUserFilter");
 const usageRefresh = document.querySelector("#usageRefresh");
@@ -865,15 +867,39 @@ const updateAdminUser = async (userId, payload) => {
   }
 };
 
-const renderAdminUsers = (users = []) => {
+let allAdminUsers = [];
+
+const deleteAdminUser = async (userId) => {
+  const response = await authorizedFetch(`/api/admin/users/${userId}`, {
+    method: "DELETE",
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error || "Suppression impossible.");
+  }
+};
+
+const renderAdminUsers = (users = [], filter = "") => {
   if (!adminUsers) return;
+  allAdminUsers = users;
   adminUsers.innerHTML = "";
-  users.forEach((user) => {
+
+  const query = filter.toLowerCase().trim();
+  const filtered = query
+    ? users.filter((u) => (u.email || "").toLowerCase().includes(query))
+    : users;
+
+  if (adminUserCount) {
+    adminUserCount.textContent = query
+      ? `${filtered.length} résultat(s) sur ${users.length} utilisateur(s)`
+      : `${users.length} utilisateur(s)`;
+  }
+
+  filtered.forEach((user) => {
     const row = document.createElement("div");
     row.className = "admin-user-row";
-    if (!user.is_active) row.classList.add("admin-user-inactive");
 
-    // Email + date
+    // Email + badges
     const emailCell = document.createElement("div");
     emailCell.className = "admin-user-email";
     const emailText = document.createElement("span");
@@ -888,66 +914,63 @@ const renderAdminUsers = (users = []) => {
       emailCell.appendChild(pwdBadge);
     }
 
-    // Role badge (clickable to toggle)
+    // Role selector with icon hint
     const roleCell = document.createElement("div");
-    const roleBadge = document.createElement("button");
-    roleBadge.type = "button";
-    roleBadge.className = `badge badge-role ${user.role === "admin" ? "badge-admin" : "badge-member"}`;
-    roleBadge.textContent = user.role === "admin" ? "Admin" : "Member";
-    roleBadge.title = "Cliquer pour changer le rôle";
-    roleBadge.addEventListener("click", async () => {
-      const newRole = user.role === "admin" ? "member" : "admin";
+    roleCell.className = "admin-role-cell";
+    const roleSelect = document.createElement("select");
+    roleSelect.className = "admin-role-select";
+    roleSelect.title = "Changer le rôle";
+    const optMember = document.createElement("option");
+    optMember.value = "member";
+    optMember.textContent = "Member";
+    const optAdmin = document.createElement("option");
+    optAdmin.value = "admin";
+    optAdmin.textContent = "Admin";
+    roleSelect.appendChild(optMember);
+    roleSelect.appendChild(optAdmin);
+    roleSelect.value = user.role === "admin" ? "admin" : "member";
+    roleSelect.addEventListener("change", async () => {
+      const newRole = roleSelect.value;
       try {
-        roleBadge.disabled = true;
+        roleSelect.disabled = true;
         await updateAdminUser(user.id, { role: newRole });
         user.role = newRole;
-        roleBadge.textContent = newRole === "admin" ? "Admin" : "Member";
-        roleBadge.className = `badge badge-role ${newRole === "admin" ? "badge-admin" : "badge-member"}`;
         setAdminStatus("Rôle mis à jour.", "ok");
       } catch (error) {
+        roleSelect.value = user.role;
         setAdminStatus(error.message || "Erreur.", "error");
       } finally {
-        roleBadge.disabled = false;
+        roleSelect.disabled = false;
       }
     });
-    roleCell.appendChild(roleBadge);
+    roleCell.appendChild(roleSelect);
 
-    // Status badge
-    const statusCell = document.createElement("div");
-    const statusBadge = document.createElement("span");
-    statusBadge.className = `badge badge-xs ${user.is_active ? "badge-active" : "badge-inactive"}`;
-    statusBadge.textContent = user.is_active ? "Actif" : "Désactivé";
-    statusCell.appendChild(statusBadge);
-
-    // Actions with icon buttons and tooltips
+    // Actions
     const actions = document.createElement("div");
     actions.className = "admin-actions";
 
-    const toggleBtn = document.createElement("button");
-    toggleBtn.type = "button";
-    toggleBtn.className = `btn btn-sm ${user.is_active ? "btn-ghost btn-danger-hover" : "btn-outline"}`;
-    toggleBtn.title = user.is_active ? "Désactiver ce compte" : "Réactiver ce compte";
-    toggleBtn.innerHTML = user.is_active
-      ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Désactiver'
-      : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Réactiver';
-    toggleBtn.addEventListener("click", async () => {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-sm btn-ghost btn-danger-hover";
+    deleteBtn.title = "Supprimer ce compte";
+    deleteBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Supprimer';
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm(`Supprimer définitivement ${user.email} ? Cette action est irréversible.`)) return;
       try {
-        toggleBtn.disabled = true;
-        await updateAdminUser(user.id, { is_active: !user.is_active });
-        user.is_active = !user.is_active;
-        setAdminStatus("Statut mis à jour.", "ok");
-        renderAdminUsers(users);
+        deleteBtn.disabled = true;
+        await deleteAdminUser(user.id);
+        setAdminStatus(`${user.email} supprimé.`, "ok");
+        await loadAdminUsers();
       } catch (error) {
-        toggleBtn.disabled = false;
+        deleteBtn.disabled = false;
         setAdminStatus(error.message || "Erreur.", "error");
       }
     });
 
-    actions.appendChild(toggleBtn);
+    actions.appendChild(deleteBtn);
 
     row.appendChild(emailCell);
     row.appendChild(roleCell);
-    row.appendChild(statusCell);
     row.appendChild(actions);
     adminUsers.appendChild(row);
   });
@@ -1862,6 +1885,12 @@ if (adminUsersNavBtn) {
 if (adminUsageNavBtn) {
   adminUsageNavBtn.addEventListener("click", () => {
     setActiveView("admin-usage");
+  });
+}
+
+if (adminUserSearch) {
+  adminUserSearch.addEventListener("input", () => {
+    renderAdminUsers(allAdminUsers, adminUserSearch.value);
   });
 }
 

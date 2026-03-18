@@ -1529,11 +1529,48 @@ input[type="range"] {
     gap: 6px;
 }
 
+.admin-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    margin-bottom: 6px;
+}
+
+.admin-search-bar svg {
+    flex-shrink: 0;
+    color: hsl(var(--muted-foreground));
+}
+
+.admin-search-bar input {
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 13px;
+    width: 100%;
+    font-family: inherit;
+    color: hsl(var(--foreground));
+}
+
+.admin-search-bar input::placeholder {
+    color: hsl(var(--muted-foreground));
+}
+
+.admin-user-count {
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    text-align: right;
+    margin-top: 4px;
+}
+
 .admin-list-header,
 .admin-user-row {
     display: grid;
     gap: 10px;
-    grid-template-columns: minmax(180px, 2fr) minmax(70px, 0.5fr) minmax(70px, 0.5fr) minmax(110px, 0.7fr);
+    grid-template-columns: minmax(180px, 2fr) minmax(90px, 0.6fr) minmax(100px, 0.6fr);
     align-items: center;
     font-size: 13px;
 }
@@ -1559,10 +1596,6 @@ input[type="range"] {
     background: #f1f5f9;
 }
 
-.admin-user-inactive {
-    opacity: 0.55;
-}
-
 .admin-user-email {
     display: flex;
     align-items: center;
@@ -1575,6 +1608,31 @@ input[type="range"] {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 500;
+}
+
+.admin-role-cell {
+    display: flex;
+}
+
+.admin-role-select {
+    font-size: 12px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    border: 1px solid hsl(var(--border));
+    background: white;
+    cursor: pointer;
+    font-family: inherit;
+    color: hsl(var(--foreground));
+    transition: border-color 0.15s ease;
+}
+
+.admin-role-select:hover {
+    border-color: hsl(var(--primary));
+}
+
+.admin-role-select:disabled {
+    opacity: 0.5;
+    cursor: wait;
 }
 
 .admin-actions {
@@ -1590,48 +1648,10 @@ input[type="range"] {
     gap: 4px;
 }
 
-/* Role & status badges */
-.badge-role {
-    cursor: pointer;
-    border: none;
-    font-family: inherit;
-    transition: transform 0.1s ease, opacity 0.1s ease;
-}
-
-.badge-role:hover {
-    transform: scale(1.05);
-    opacity: 0.85;
-}
-
-.badge-role:disabled {
-    opacity: 0.5;
-    cursor: wait;
-}
-
-.badge-admin {
-    background: #ede9fe;
-    color: #5b21b6;
-}
-
-.badge-member {
-    background: #e0f2fe;
-    color: #0369a1;
-}
-
 .badge-xs {
     font-size: 10px;
     padding: 2px 7px;
     border-radius: 4px;
-}
-
-.badge-active {
-    background: #ecfdf5;
-    color: #065f46;
-}
-
-.badge-inactive {
-    background: #fef2f2;
-    color: #991b1b;
 }
 
 .badge-warn {

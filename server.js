@@ -880,6 +880,45 @@ app.patch(
   },
 );
 
+// Delete user
+app.delete(
+  "/api/admin/users/:id",
+  requireAuth,
+  requireActiveProfile,
+  requireAdmin,
+  async (req, res) => {
+    const userId = req.params.id;
+
+    if (userId === req.user.id) {
+      return res
+        .status(400)
+        .json({ error: "Impossible de supprimer votre propre compte." });
+    }
+
+    // Delete profile first (cascade will not apply from profiles to auth)
+    const { error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .delete()
+      .eq("id", userId);
+
+    if (profileError) {
+      return res.status(500).json({ error: "Suppression du profil impossible." });
+    }
+
+    // Delete from Supabase Auth
+    const { error: authError } =
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+
+    if (authError) {
+      return res
+        .status(500)
+        .json({ error: "Profil supprimé mais compte auth non supprimé." });
+    }
+
+    return res.json({ ok: true });
+  },
+);
+
 // Bulk import users from email list
 app.post(
   "/api/admin/users/import",
