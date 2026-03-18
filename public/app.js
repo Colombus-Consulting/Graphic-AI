@@ -50,6 +50,18 @@ const adminUsers = document.querySelector("#adminUsers");
 const adminNavGroup = document.querySelector("#adminNavGroup");
 const adminUsersNavBtn = document.querySelector("#adminUsersNavBtn");
 const adminUsageNavBtn = document.querySelector("#adminUsageNavBtn");
+const importFile = document.querySelector("#importFile");
+const importFileName = document.querySelector("#importFileName");
+const importBtn = document.querySelector("#importBtn");
+const importProgress = document.querySelector("#importProgress");
+const importProgressFill = document.querySelector("#importProgressFill");
+const importProgressText = document.querySelector("#importProgressText");
+const importResults = document.querySelector("#importResults");
+const forcePasswordModal = document.querySelector("#forcePasswordModal");
+const forcePasswordForm = document.querySelector("#forcePasswordForm");
+const forceNewPasswordInput = document.querySelector("#forceNewPassword");
+const forceConfirmPasswordInput = document.querySelector("#forceConfirmPassword");
+const forcePasswordError = document.querySelector("#forcePasswordError");
 const usagePeriod = document.querySelector("#usagePeriod");
 const usageUserFilter = document.querySelector("#usageUserFilter");
 const usageRefresh = document.querySelector("#usageRefresh");
@@ -651,6 +663,57 @@ const changePassword = async (newPassword) => {
     return { error: error.message };
   }
   return { success: true };
+};
+
+// Force password change modal
+const openForcePasswordModal = () => {
+  if (!forcePasswordModal) return;
+  forcePasswordModal.classList.add("is-open");
+  forcePasswordModal.setAttribute("aria-hidden", "false");
+  if (forceNewPasswordInput) forceNewPasswordInput.focus();
+};
+
+const closeForcePasswordModal = () => {
+  if (!forcePasswordModal) return;
+  forcePasswordModal.classList.remove("is-open");
+  forcePasswordModal.setAttribute("aria-hidden", "true");
+  if (forcePasswordForm) forcePasswordForm.reset();
+  if (forcePasswordError) {
+    forcePasswordError.hidden = true;
+    forcePasswordError.textContent = "";
+  }
+};
+
+// Excel import: parse file and extract emails
+const parseExcelEmails = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const workbook = XLSX.read(e.target.result, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        const emails = [];
+        for (const row of rows) {
+          if (!row || row.length === 0) continue;
+          // Check each cell for email-like values
+          for (const cell of row) {
+            const val = String(cell || "").trim().toLowerCase();
+            if (val && val.includes("@") && val.includes(".")) {
+              emails.push(val);
+              break; // one email per row
+            }
+          }
+        }
+        resolve([...new Set(emails)]); // deduplicate
+      } catch (err) {
+        reject(new Error("Impossible de lire le fichier Excel."));
+      }
+    };
+    reader.onerror = () => reject(new Error("Erreur de lecture du fichier."));
+    reader.readAsArrayBuffer(file);
+  });
 };
 
 // Generate high quality version and download
@@ -1867,7 +1930,14 @@ if (passwordForm) {
       return;
     }
 
-    // Success
+    // Success — also clear force flag if applicable
+    if (currentProfile?.must_change_password) {
+      try {
+        await authorizedFetch("/api/me/password-changed", { method: "POST" });
+        currentProfile.must_change_password = false;
+        closeForcePasswordModal();
+      } catch (_) {}
+    }
     closePasswordModal();
     setStatus("Mot de passe modifié avec succès.", "ok");
     if (submitBtn) {
@@ -1909,6 +1979,163 @@ if (adminCreateForm) {
   });
 }
 
+// Excel import handlers
+if (importFile) {
+  importFile.addEventListener("change", () => {
+    const file = importFile.files[0];
+    if (file) {
+      if (importFileName) importFileName.textContent = file.name;
+      if (importBtn) importBtn.disabled = false;
+    } else {
+      if (importFileName) importFileName.textContent = "Aucun fichier sélectionné";
+      if (importBtn) importBtn.disabled = true;
+    }
+    if (importResults) importResults.hidden = true;
+  });
+}
+
+if (importBtn) {
+  importBtn.addEventListener("click", async () => {
+    const file = importFile?.files[0];
+    if (!file) return;
+
+    importBtn.disabled = true;
+    importBtn.textContent = "Import en cours...";
+    if (importProgress) importProgress.hidden = false;
+    if (importResults) importResults.hidden = true;
+    if (importProgressFill) importProgressFill.style.width = "10%";
+    if (importProgressText) importProgressText.textContent = "Lecture du fichier...";
+
+    try {
+      const emails = await parseExcelEmails(file);
+
+      if (emails.length === 0) {
+        throw new Error("Aucun email trouvé dans le fichier.");
+      }
+
+      if (importProgressFill) importProgressFill.style.width = "30%";
+      if (importProgressText)
+        importProgressText.textContent = `${emails.length} email(s) trouvé(s). Création des comptes...`;
+
+      const response = await authorizedFetch("/api/admin/users/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Import impossible.");
+      }
+
+      if (importProgressFill) importProgressFill.style.width = "100%";
+
+      const r = data.results;
+      let html = '<div class="import-results-summary">';
+      html += `<div class="import-stat import-stat-ok"><strong>${r.created.length}</strong> créé(s)</div>`;
+      html += `<div class="import-stat import-stat-skip"><strong>${r.skipped.length}</strong> ignoré(s)</div>`;
+      html += `<div class="import-stat import-stat-err"><strong>${r.errors.length}</strong> erreur(s)</div>`;
+      html += "</div>";
+
+      if (r.skipped.length > 0) {
+        html += '<details class="import-details"><summary>Ignorés (déjà existants)</summary><ul>';
+        r.skipped.forEach((s) => {
+          html += `<li>${s.email}</li>`;
+        });
+        html += "</ul></details>";
+      }
+      if (r.errors.length > 0) {
+        html += '<details class="import-details" open><summary>Erreurs</summary><ul>';
+        r.errors.forEach((e) => {
+          html += `<li><strong>${e.email || "?"}</strong> — ${e.reason}</li>`;
+        });
+        html += "</ul></details>";
+      }
+
+      if (importResults) {
+        importResults.innerHTML = html;
+        importResults.hidden = false;
+      }
+
+      await loadAdminUsers();
+    } catch (err) {
+      if (importResults) {
+        importResults.innerHTML = `<p class="import-error">${err.message || "Erreur d'import."}</p>`;
+        importResults.hidden = false;
+      }
+    } finally {
+      importBtn.disabled = false;
+      importBtn.textContent = "Importer";
+      if (importProgress) importProgress.hidden = true;
+      if (importFile) importFile.value = "";
+      if (importFileName) importFileName.textContent = "Aucun fichier sélectionné";
+    }
+  });
+}
+
+// Force password change form handler
+if (forcePasswordForm) {
+  forcePasswordForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const newPass = forceNewPasswordInput?.value || "";
+    const confirmPass = forceConfirmPasswordInput?.value || "";
+
+    if (newPass.length < 6) {
+      if (forcePasswordError) {
+        forcePasswordError.textContent =
+          "Le mot de passe doit contenir au moins 6 caractères.";
+        forcePasswordError.hidden = false;
+      }
+      return;
+    }
+
+    if (newPass !== confirmPass) {
+      if (forcePasswordError) {
+        forcePasswordError.textContent =
+          "Les mots de passe ne correspondent pas.";
+        forcePasswordError.hidden = false;
+      }
+      return;
+    }
+
+    const submitBtn = document.querySelector("#forceSubmitPasswordBtn");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Enregistrement...";
+    }
+
+    const result = await changePassword(newPass);
+
+    if (result.error) {
+      if (forcePasswordError) {
+        forcePasswordError.textContent = result.error;
+        forcePasswordError.hidden = false;
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Enregistrer et continuer";
+      }
+      return;
+    }
+
+    // Notify server to clear the flag
+    try {
+      await authorizedFetch("/api/me/password-changed", { method: "POST" });
+    } catch (_) {}
+
+    // Update local profile
+    if (currentProfile) currentProfile.must_change_password = false;
+
+    closeForcePasswordModal();
+    setStatus("Mot de passe modifié avec succès. Bienvenue !", "ok");
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Enregistrer et continuer";
+    }
+  });
+}
+
 if (usagePeriod) {
   usagePeriod.addEventListener("change", loadUsageStats);
 }
@@ -1943,6 +2170,12 @@ const handleSession = async (session) => {
     setViewState(false);
     return;
   }
+
+  // Force password change on first login
+  if (currentProfile.must_change_password) {
+    openForcePasswordModal();
+  }
+
   if (userEmail) {
     userEmail.textContent = session.user?.email || "—";
   }

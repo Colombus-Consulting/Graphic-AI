@@ -1560,6 +1560,158 @@ input[type="range"] {
     justify-content: flex-start;
 }
 
+/* Import section */
+.admin-import-section {
+    border-top: 1px solid hsl(var(--border));
+    padding-top: 16px;
+    display: grid;
+    gap: 10px;
+}
+
+.admin-import-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+}
+
+.admin-import-desc {
+    font-size: 12px;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.5;
+}
+
+.admin-import-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.import-file-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.import-file-name {
+    font-size: 13px;
+    color: hsl(var(--muted-foreground));
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.import-progress {
+    display: grid;
+    gap: 6px;
+}
+
+.import-progress-bar {
+    height: 6px;
+    background: hsl(var(--border));
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.import-progress-fill {
+    height: 100%;
+    background: hsl(var(--primary));
+    border-radius: 3px;
+    transition: width 0.4s ease;
+    width: 0%;
+}
+
+.import-progress-text {
+    font-size: 12px;
+    color: hsl(var(--muted-foreground));
+}
+
+.import-results {
+    display: grid;
+    gap: 10px;
+}
+
+.import-results-summary {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.import-stat {
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.import-stat-ok {
+    background: #ecfdf5;
+    color: #065f46;
+}
+
+.import-stat-skip {
+    background: #fefce8;
+    color: #854d0e;
+}
+
+.import-stat-err {
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.import-details {
+    font-size: 12px;
+    color: hsl(var(--muted-foreground));
+}
+
+.import-details summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.import-details ul {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.import-details li {
+    padding: 2px 0;
+}
+
+.import-error {
+    color: #991b1b;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* Force password change modal */
+.force-password-backdrop {
+    cursor: default;
+}
+
+.force-password-header {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.force-password-header .badge {
+    justify-self: start;
+}
+
+.force-password-header .subtitle {
+    font-size: 13px;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.5;
+}
+
 .stat-item {
     display: flex;
     flex-direction: column;

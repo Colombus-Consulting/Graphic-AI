@@ -467,6 +467,27 @@
                                 </div>
                                 <p id="adminStatus" class="note"></p>
                             </form>
+
+                            <div class="admin-import-section">
+                                <h3 class="admin-import-title">Import en masse</h3>
+                                <p class="admin-import-desc">Importez un fichier Excel (.xlsx) contenant une colonne d'emails. Chaque utilisateur sera cr&eacute;&eacute; avec le mot de passe par d&eacute;faut et devra le changer &agrave; sa premi&egrave;re connexion.</p>
+                                <div class="admin-import-row">
+                                    <label class="btn btn-outline import-file-label" for="importFile">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                        Choisir un fichier Excel
+                                    </label>
+                                    <input id="importFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+                                    <span id="importFileName" class="import-file-name">Aucun fichier s&eacute;lectionn&eacute;</span>
+                                    <button id="importBtn" class="btn btn-primary" type="button" disabled>Importer</button>
+                                </div>
+                                <div id="importProgress" class="import-progress" hidden>
+                                    <div class="import-progress-bar">
+                                        <div id="importProgressFill" class="import-progress-fill"></div>
+                                    </div>
+                                    <p id="importProgressText" class="import-progress-text">Import en cours...</p>
+                                </div>
+                                <div id="importResults" class="import-results" hidden></div>
+                            </div>
                             <div class="admin-list">
                                 <div class="admin-list-header">
                                     <span>Email</span>
@@ -708,7 +729,58 @@
             </div>
         </div>
 
+        <!-- Force password change modal (non-dismissable) -->
+        <div id="forcePasswordModal" class="modal" aria-hidden="true">
+            <div class="modal-backdrop force-password-backdrop"></div>
+            <div
+                class="modal-content password-modal-content"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="forcePasswordModalTitle"
+            >
+                <div class="force-password-header">
+                    <span class="badge">Premi&egrave;re connexion</span>
+                    <h3 id="forcePasswordModalTitle">Changez votre mot de passe</h3>
+                    <p class="subtitle">Pour des raisons de s&eacute;curit&eacute;, vous devez changer votre mot de passe avant de pouvoir utiliser l'application.</p>
+                </div>
+                <form id="forcePasswordForm" class="password-form">
+                    <div class="form-group">
+                        <label class="field-label" for="forceNewPassword">Nouveau mot de passe</label>
+                        <input
+                            id="forceNewPassword"
+                            type="password"
+                            placeholder="Minimum 6 caract&egrave;res"
+                            required
+                            minlength="6"
+                        />
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label" for="forceConfirmPassword">Confirmer le mot de passe</label>
+                        <input
+                            id="forceConfirmPassword"
+                            type="password"
+                            placeholder="R&eacute;p&eacute;tez le mot de passe"
+                            required
+                            minlength="6"
+                        />
+                    </div>
+                    <p id="forcePasswordError" class="password-error" hidden></p>
+                    <div class="modal-actions">
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                            id="forceSubmitPasswordBtn"
+                            style="width: 100%"
+                        >
+                            Enregistrer et continuer
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <script src="app.js?v=6"></script>
+        <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+        <script src="app.js?v=7"></script>
     </body>
 </html>

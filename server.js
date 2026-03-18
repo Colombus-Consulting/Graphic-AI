@@ -110,7 +110,7 @@ const requireAuth = async (req, res, next) => {
 const loadProfile = async (userId) => {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("id, email, role, is_active, daily_limit_override")
+    .select("id, email, role, is_active, daily_limit_override, must_change_password")
     .eq("id", userId)
     .single();
   if (error) throw error;
@@ -748,7 +748,7 @@ app.get(
   async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from("profiles")
-      .select("id, email, role, is_active, created_at")
+      .select("id, email, role, is_active, created_at, must_change_password")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -801,6 +801,7 @@ app.post(
         email: safeEmail,
         role: safeRole,
         is_active: true,
+        must_change_password: true,
       });
 
     if (profileError) {
@@ -815,6 +816,7 @@ app.post(
         email: safeEmail,
         role: safeRole,
         is_active: true,
+        must_change_password: true,
       },
     });
   },
@@ -874,6 +876,112 @@ app.patch(
       }
     }
 
+    return res.json({ ok: true });
+  },
+);
+
+// Bulk import users from email list
+app.post(
+  "/api/admin/users/import",
+  requireAuth,
+  requireActiveProfile,
+  requireAdmin,
+  async (req, res) => {
+    const { emails } = req.body || {};
+    if (!Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json({ error: "Liste d'emails requise." });
+    }
+
+    if (emails.length > 500) {
+      return res.status(400).json({ error: "Maximum 500 utilisateurs par import." });
+    }
+
+    const defaultPassword = "Colombus138!";
+    const results = { created: [], skipped: [], errors: [] };
+
+    // Get existing emails to check duplicates
+    const { data: existingProfiles } = await supabaseAdmin
+      .from("profiles")
+      .select("email");
+    const existingEmails = new Set(
+      (existingProfiles || []).map((p) => p.email.toLowerCase()),
+    );
+
+    for (const rawEmail of emails) {
+      const email =
+        typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+
+      if (!email || !email.includes("@")) {
+        results.errors.push({ email: rawEmail, reason: "Email invalide." });
+        continue;
+      }
+
+      if (existingEmails.has(email)) {
+        results.skipped.push({ email, reason: "Utilisateur déjà existant." });
+        continue;
+      }
+
+      try {
+        const { data, error } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password: defaultPassword,
+          email_confirm: true,
+        });
+
+        if (error || !data?.user) {
+          results.errors.push({
+            email,
+            reason: error?.message || "Création impossible.",
+          });
+          continue;
+        }
+
+        const { error: profileError } = await supabaseAdmin
+          .from("profiles")
+          .insert({
+            id: data.user.id,
+            email,
+            role: "member",
+            is_active: true,
+            must_change_password: true,
+          });
+
+        if (profileError) {
+          results.errors.push({
+            email,
+            reason: "Compte auth créé mais profil manquant.",
+          });
+          continue;
+        }
+
+        existingEmails.add(email);
+        results.created.push({ email });
+      } catch (err) {
+        results.errors.push({
+          email,
+          reason: err.message || "Erreur inattendue.",
+        });
+      }
+    }
+
+    return res.json({ results });
+  },
+);
+
+// Clear must_change_password flag after password change
+app.post(
+  "/api/me/password-changed",
+  requireAuth,
+  requireActiveProfile,
+  async (req, res) => {
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({ must_change_password: false })
+      .eq("id", req.user.id);
+
+    if (error) {
+      return res.status(500).json({ error: "Mise à jour impossible." });
+    }
     return res.json({ ok: true });
   },
 );
