@@ -1,6 +1,6 @@
 ﻿# Graphic AI
 
-Application web minimale pour améliorer des graphiques avec Gemini 3 Pro (aperçu image).
+Application web minimale pour améliorer des graphiques avec le modèle d'image d'OpenAI (`gpt-image-2`).
 
 ## Démarrage
 
@@ -13,7 +13,7 @@ Application web minimale pour améliorer des graphiques avec Gemini 3 Pro (aper�
 2. Crée un fichier `.env` à partir de `.env.example` et ajoute les clés :
 
    ```text
-   GEMINI_API_KEY=...
+   OPENAI_API_KEY=...
    PORT=3000
    SUPABASE_URL=...
    SUPABASE_ANON_KEY=...
@@ -101,7 +101,8 @@ Application web minimale pour améliorer des graphiques avec Gemini 3 Pro (aper�
 ## Détails techniques
 
 - Serveur Node/Express avec la route `/api/generate`.
-- Modèle utilisé : `gemini-3-pro-image-preview` via l'API Gemini.
-- Les images sont envoyées en base64 au serveur, puis relayées à l'API.
+- Modèle utilisé : `gpt-image-2` via l'API OpenAI (`/v1/images/edits` quand des images sont fournies, `/v1/images/generations` sinon).
+- Les images sont envoyées en base64 au serveur, puis relayées à l'API en multipart.
+- L'option `imageSize` (1K/2K/4K) est mappée vers `quality` OpenAI (`low`/`medium`/`high`). L'aspect ratio est mappé vers la taille la plus proche supportée (`1024x1024`, `1024x1536`, `1536x1024`).
 - Les résultats sont sauvegardés dans le stockage Supabase et indexés en base.
-- Le nombre d'images demandé est indiqué dans le prompt (le modèle peut en retourner moins).
+- Note : l'organisation OpenAI doit être vérifiée pour accéder aux modèles GPT Image.

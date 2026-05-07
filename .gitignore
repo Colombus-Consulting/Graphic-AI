@@ -3,3 +3,7 @@ node_modules/
 .DS_Store
 .vercel
 .claude/
+_bmad-output/
+*.docx
+*_tmp.json
+test_openai*

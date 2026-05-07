@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+import dotenv from "dotenv";
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
 
@@ -6,7 +6,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKey = process.env.OPENAI_API_KEY;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -29,12 +29,10 @@ app.use(express.json({ limit: "35mb" }));
 app.use(express.static("public"));
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-const GEMINI_BASE_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models";
-const PRIMARY_MODEL = "gemini-3-pro-image-preview";
-const FALLBACK_MODEL = "gemini-3.1-flash-image-preview";
-const geminiEndpoint = (model = PRIMARY_MODEL) =>
-  `${GEMINI_BASE_URL}/${model}:generateContent`;
+
+const OPENAI_BASE_URL = "https://api.openai.com/v1";
+const MODEL = "gpt-image-2";
+
 const VALID_ASPECT_RATIOS = new Set([
   "1:1",
   "2:3",
@@ -48,36 +46,41 @@ const VALID_ASPECT_RATIOS = new Set([
   "21:9",
 ]);
 const VALID_IMAGE_SIZES = new Set(["1K", "2K", "4K"]);
-const SYSTEM_INSTRUCTION = {
-  parts: [
-    {
-      text: [
-        "You are a professional infographic and data visualization redesigner.",
-        "Your absolute priority is DATA FIDELITY: every text, number, label, title, legend, axis, unit, and data point from the source image must appear in your output exactly as written, in the original language, with zero modifications.",
-        "You apply visual styles from reference images (color palettes, typography styles, iconography, layout patterns, spacing) to create a fresh, polished design.",
-        "You always produce a clean white background, clear visual hierarchy, proper alignments, and readable typography.",
-        "You never invent data, never borrow text or numbers from inspiration images, and never omit any information from the source.",
-      ].join(" "),
-    },
-  ],
+
+// Frontend imageSize tier → OpenAI quality
+const QUALITY_FROM_SIZE = { "1K": "low", "2K": "medium", "4K": "high" };
+
+// Map a "W:H" aspect ratio to one of the three sizes supported by gpt-image-2.
+const openaiSizeFromAspectRatio = (aspectRatio) => {
+  if (!aspectRatio) return "auto";
+  const parts = String(aspectRatio).split(":");
+  const w = Number(parts[0]);
+  const h = Number(parts[1]);
+  if (!w || !h) return "auto";
+  const r = w / h;
+  if (r > 1.15) return "1536x1024";
+  if (r < 0.87) return "1024x1536";
+  return "1024x1024";
 };
 
-const CREATE_SYSTEM_INSTRUCTION = {
-  parts: [
-    {
-      text: [
-        "You are a professional visual designer and infographic creator.",
-        "Your goal is to produce high-quality, polished visuals from the user's textual description.",
-        "You encourage creative freedom: interpret the brief with originality while maintaining a professional, clean result.",
-        "Always produce a clean white background, clear visual hierarchy, proper alignments, and readable typography.",
-        "If a source image is provided, use it as loose inspiration — extract layout ideas or content cues without strict data fidelity.",
-        "If style reference images are provided, extract their visual language (color palette, typography, iconography, layout patterns) and apply it creatively.",
-        "You may invent placeholder data, icons, or illustrations if they serve the user's described concept.",
-        "Prioritize visual impact, clarity, and aesthetic quality above all.",
-      ].join(" "),
-    },
-  ],
-};
+const SYSTEM_INSTRUCTION_TEXT = [
+  "You are a professional infographic and data visualization redesigner.",
+  "Your absolute priority is DATA FIDELITY: every text, number, label, title, legend, axis, unit, and data point from the source image must appear in your output exactly as written, in the original language, with zero modifications.",
+  "You apply visual styles from reference images (color palettes, typography styles, iconography, layout patterns, spacing) to create a fresh, polished design.",
+  "You always produce a clean white background, clear visual hierarchy, proper alignments, and readable typography.",
+  "You never invent data, never borrow text or numbers from inspiration images, and never omit any information from the source.",
+].join(" ");
+
+const CREATE_SYSTEM_INSTRUCTION_TEXT = [
+  "You are a professional visual designer and infographic creator.",
+  "Your goal is to produce high-quality, polished visuals from the user's textual description.",
+  "You encourage creative freedom: interpret the brief with originality while maintaining a professional, clean result.",
+  "Always produce a clean white background, clear visual hierarchy, proper alignments, and readable typography.",
+  "If a source image is provided, use it as loose inspiration — extract layout ideas or content cues without strict data fidelity.",
+  "If style reference images are provided, extract their visual language (color palette, typography, iconography, layout patterns) and apply it creatively.",
+  "You may invent placeholder data, icons, or illustrations if they serve the user's described concept.",
+  "Prioritize visual impact, clarity, and aesthetic quality above all.",
+].join(" ");
 
 const ensureSupabase = (res) => {
   if (supabaseEnabled) return true;
@@ -182,16 +185,32 @@ const checkQuota = async (req, res, next) => {
   }
 };
 
-const buildPrompt = ({ userPrompt, inspirationCount }) => {
+const buildPrompt = ({ userPrompt, inspirationCount, hasSourceImage }) => {
   const lines = [
+    SYSTEM_INSTRUCTION_TEXT,
+    "",
     "TASK: Recreate the source chart with a completely new visual design inspired by the style references.",
+    "",
+  ];
+
+  if (hasSourceImage && inspirationCount > 0) {
+    lines.push(
+      `IMAGE ROLES — The first attached image is the SOURCE CHART (extract ALL data, text, numbers, labels, structure). The next ${inspirationCount} image(s) are STYLE REFERENCES (extract ONLY visual language: colors, typography, icons, layout — ignore their data and text).`,
+    );
+  } else if (hasSourceImage) {
+    lines.push(
+      "IMAGE ROLE — The attached image is the SOURCE CHART. Extract ALL data, text, numbers, labels, and structure from it.",
+    );
+  }
+
+  lines.push(
     "",
     "STEP 1 — DATA EXTRACTION: Identify and memorize every single piece of information in the source chart: all titles, subtitles, axis labels, data values, percentages, legends, footnotes, units, and annotations. Nothing may be omitted or altered.",
     "STEP 2 — STYLE ANALYSIS: Study the visual language of the inspiration image(s): color palette, typography choices, icon style, layout structure, spacing rhythm, and overall aesthetic. Do not copy any information or text from the inspiration, only visual design.",
     "STEP 3 — SYNTHESIS: Design a new chart that contains 100% of the source data, presented with the visual style extracted from the inspirations. Prioritize readability, clean alignment, and typographic hierarchy.",
     "",
     "OUTPUT: A single polished chart image on a white background.",
-  ];
+  );
 
   if (inspirationCount === 0) {
     lines.push(
@@ -206,13 +225,22 @@ const buildPrompt = ({ userPrompt, inspirationCount }) => {
   return lines.join("\n");
 };
 
-const buildRefinePrompt = ({ userPrompt, inspirationCount }) => {
+const buildRefinePrompt = ({ userPrompt, inspirationCount, hasSourceImage }) => {
   const lines = [
+    SYSTEM_INSTRUCTION_TEXT,
+    "",
     "TASK: Apply ONLY the requested modifications to the source image. Do not redesign it.",
     "Preserve 100% of existing information, text, numbers, and language.",
     "Keep the current style unless the user explicitly asks to change it.",
     "Output only the modified image.",
   ];
+
+  if (hasSourceImage && inspirationCount > 0) {
+    lines.push(
+      "",
+      `IMAGE ROLES — The first attached image is the SOURCE to refine. The next ${inspirationCount} image(s) are optional STYLE REFERENCES (use only if the requested modifications imply a style change).`,
+    );
+  }
 
   if (userPrompt && userPrompt.trim().length > 0) {
     lines.push("", "REQUESTED MODIFICATIONS:", userPrompt.trim());
@@ -223,31 +251,38 @@ const buildRefinePrompt = ({ userPrompt, inspirationCount }) => {
     );
   }
 
-  if (inspirationCount > 0) {
-    lines.push(`Style reference images provided: ${inspirationCount}.`);
-  }
-
   return lines.join("\n");
 };
 
 const buildCreatePrompt = ({ userPrompt, inspirationCount, hasSourceImage }) => {
   const lines = [
+    CREATE_SYSTEM_INSTRUCTION_TEXT,
+    "",
     "TASK: Create a professional visual from the description below.",
+    "",
+  ];
+
+  if (hasSourceImage && inspirationCount > 0) {
+    lines.push(
+      `IMAGE ROLES — The first attached image is a loose REFERENCE for layout/content cues (no strict data fidelity). The next ${inspirationCount} image(s) are STYLE REFERENCES — extract ONLY their visual language.`,
+    );
+  } else if (hasSourceImage) {
+    lines.push(
+      "IMAGE ROLE — The attached image is a loose REFERENCE for layout/content cues. Reinterpret it creatively; no strict data fidelity required.",
+    );
+  } else if (inspirationCount > 0) {
+    lines.push(
+      `IMAGE ROLES — The ${inspirationCount} attached image(s) are STYLE REFERENCES — extract ONLY their visual language.`,
+    );
+  }
+
+  lines.push(
     "",
     "STEP 1 — UNDERSTAND THE BRIEF: Read the user's description carefully and identify the key message, structure, and visual elements requested.",
     "STEP 2 — STYLE ANALYSIS: " +
       (inspirationCount > 0
         ? `Study the visual language of the ${inspirationCount} style reference(s): color palette, typography, icon style, layout structure, and overall aesthetic. Apply this style creatively.`
         : "Use modern infographic best practices: clean layout, professional color palette, clear typography hierarchy."),
-  ];
-
-  if (hasSourceImage) {
-    lines.push(
-      "STEP 3 — REFERENCE IMAGE: A source image is provided as loose inspiration. Draw layout ideas or content cues from it, but you are free to reinterpret creatively. No strict data fidelity required.",
-    );
-  }
-
-  lines.push(
     "",
     "OUTPUT: A single polished visual on a white background. Prioritize clarity, visual impact, and professional quality.",
   );
@@ -259,11 +294,10 @@ const buildCreatePrompt = ({ userPrompt, inspirationCount, hasSourceImage }) => 
   return lines.join("\n");
 };
 
-const buildParts = ({
+const buildFinalPrompt = ({
   baseImage,
   inspirations,
   prompt,
-  count,
   variantIndex,
   variantTotal,
   mode,
@@ -274,131 +308,66 @@ const buildParts = ({
     : mode === "refine"
       ? buildRefinePrompt
       : buildPrompt;
-  const parts = [];
 
-  // 1. Source image (required for redesign/refine, optional for create)
-  if (baseImage) {
-    const label = isCreate
-      ? "REFERENCE IMAGE — Use this as loose inspiration for layout and content cues:"
-      : "SOURCE CHART — Extract ALL data, text, numbers, labels, and structure from this image:";
-    parts.push({ text: label });
-    parts.push({
-      inline_data: {
-        mime_type: baseImage.mimeType,
-        data: baseImage.data,
-      },
-    });
-  }
-
-  // 2. Inspiration images (style only)
-  if (inspirations.length > 0) {
-    parts.push({
-      text: "STYLE REFERENCES — Extract ONLY visual style (colors, typography, icons, layout) from these images. Ignore their data content:",
-    });
-    inspirations.forEach((image, index) => {
-      parts.push({
-        text: `Style reference ${index + 1}:`,
-      });
-      parts.push({
-        inline_data: {
-          mime_type: image.mimeType,
-          data: image.data,
-        },
-      });
-    });
-  }
-
-  // 3. Instructions AFTER context (per Gemini 3 best practice)
-  parts.push({
-    text: isCreate
-      ? promptBuilder({
-          userPrompt: prompt,
-          inspirationCount: inspirations.length,
-          hasSourceImage: Boolean(baseImage),
-        })
-      : promptBuilder({
-          userPrompt: prompt,
-          inspirationCount: inspirations.length,
-        }),
+  let finalPrompt = promptBuilder({
+    userPrompt: prompt,
+    inspirationCount: inspirations.length,
+    hasSourceImage: Boolean(baseImage),
   });
 
-  // 4. Variant differentiation (only when multiple variants requested)
   if (variantTotal && variantTotal > 1) {
-    parts.push({
-      text:
-        mode === "refine"
-          ? `This is variant ${variantIndex} of ${variantTotal}. Make small visual differences compared to other variants while keeping the same modifications.`
-          : `This is variant ${variantIndex} of ${variantTotal}. Use a distinctly different visual interpretation: different color palette, different typography weight, different layout arrangement.${isCreate ? "" : " The data must remain identical across all variants."}`,
-    });
+    const variantNote =
+      mode === "refine"
+        ? `\n\nVARIANT NOTE: This is variant ${variantIndex} of ${variantTotal}. Make small visual differences compared to other variants while keeping the same modifications.`
+        : `\n\nVARIANT NOTE: This is variant ${variantIndex} of ${variantTotal}. Use a distinctly different visual interpretation: different color palette, different typography weight, different layout arrangement.${isCreate ? "" : " The data must remain identical across all variants."}`;
+    finalPrompt += variantNote;
   }
 
-  return parts;
+  return finalPrompt;
 };
 
 const extractImages = (data) => {
+  const items = Array.isArray(data?.data) ? data.data : [];
   const images = [];
-  const thoughtImages = [];
-  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
-
-  candidates.forEach((candidate) => {
-    const parts = candidate?.content?.parts || [];
-    parts.forEach((part) => {
-      const inlineData = part?.inlineData || part?.inline_data;
-      if (inlineData?.data) {
-        const entry = {
-          mimeType: inlineData.mimeType || inlineData.mime_type || "image/png",
-          data: inlineData.data,
-        };
-        if (part?.thought) {
-          thoughtImages.push(entry);
-        } else {
-          images.push(entry);
-        }
-      }
-    });
+  items.forEach((item) => {
+    if (item?.b64_json) {
+      images.push({ mimeType: "image/png", data: item.b64_json });
+    }
   });
-
-  return images.length > 0 ? images : thoughtImages;
+  return images;
 };
 
-const buildApiError = (data, status) => ({
-  message: data?.error?.message || "Erreur lors de l'appel Gemini.",
-  status: status || data?.error?.code || 500,
-  code: data?.error?.status,
-  details: data?.error?.details || [],
-});
+const buildApiError = (data, status) => {
+  const err = data?.error || {};
+  return {
+    message: err.message || "Erreur lors de l'appel OpenAI.",
+    status: status || 500,
+    code: err.code || err.type,
+    details: [],
+  };
+};
 
 const USD_TO_EUR = 0.84;
 const MONTHLY_BASE_EUR = 18;
 
-const PRICING = {
-  inputPerToken: 2.0 / 1_000_000,
-  outputTextPerToken: 12.0 / 1_000_000,
-  outputImagePerToken: 120.0 / 1_000_000,
-  outputImageTokens: { "1K": 1120, "2K": 1120, "4K": 2000 },
+// gpt-image-2 per-image USD pricing
+const PRICING_TABLE = {
+  low: { "1024x1024": 0.006, "1024x1536": 0.005, "1536x1024": 0.005 },
+  medium: { "1024x1024": 0.053, "1024x1536": 0.041, "1536x1024": 0.041 },
+  high: { "1024x1024": 0.211, "1024x1536": 0.165, "1536x1024": 0.165 },
 };
 
-const calculateCostUsd = ({
-  promptTokenCount,
-  candidatesTokenCount,
-  outputImageCount,
-  imageSize,
-}) => {
-  if (!promptTokenCount && !candidatesTokenCount) return null;
-  const inputCost = (promptTokenCount || 0) * PRICING.inputPerToken;
-  const imgCount = outputImageCount || 0;
-  const imgTokensPer = PRICING.outputImageTokens[imageSize] || 1120;
-  const totalImageTokens = imgCount * imgTokensPer;
-  const textTokens = Math.max(
-    0,
-    (candidatesTokenCount || 0) - totalImageTokens,
-  );
-  const outputTextCost = textTokens * PRICING.outputTextPerToken;
-  const outputImageCost = totalImageTokens * PRICING.outputImagePerToken;
-  return (
-    Math.round((inputCost + outputTextCost + outputImageCost) * 1_000_000) /
-    1_000_000
-  );
+const pricePerImage = (quality, size) => {
+  const tier = PRICING_TABLE[quality] || PRICING_TABLE.medium;
+  // For "auto" or any unmapped size, fall back to the square price as a safe estimate.
+  return tier[size] ?? tier["1024x1024"];
+};
+
+const calculateCostUsd = ({ outputImageCount, quality, size }) => {
+  const count = outputImageCount || 0;
+  if (count <= 0) return 0;
+  const cost = count * pricePerImage(quality, size);
+  return Math.round(cost * 1_000_000) / 1_000_000;
 };
 
 const logApiUsage = async ({
@@ -406,18 +375,18 @@ const logApiUsage = async ({
   projectId,
   mode,
   imageSize,
+  quality,
+  size,
   inputImageCount,
   outputImageCount,
   usage,
-  isFallback,
   success,
 }) => {
   if (!supabaseEnabled) return;
   const estimatedCostUsd = calculateCostUsd({
-    promptTokenCount: usage?.promptTokenCount,
-    candidatesTokenCount: usage?.candidatesTokenCount,
     outputImageCount: outputImageCount || 0,
-    imageSize: imageSize || "1K",
+    quality,
+    size,
   });
   try {
     await supabaseAdmin.from("api_usage").insert({
@@ -427,11 +396,11 @@ const logApiUsage = async ({
       image_size: imageSize || "1K",
       input_image_count: inputImageCount || 1,
       output_image_count: outputImageCount || 0,
-      prompt_token_count: usage?.promptTokenCount ?? null,
-      candidates_token_count: usage?.candidatesTokenCount ?? null,
-      total_token_count: usage?.totalTokenCount ?? null,
+      prompt_token_count: usage?.input_tokens ?? null,
+      candidates_token_count: usage?.output_tokens ?? null,
+      total_token_count: usage?.total_tokens ?? null,
       estimated_cost_usd: estimatedCostUsd,
-      is_fallback: isFallback || false,
+      is_fallback: false,
       success: success !== false,
     });
   } catch (err) {
@@ -461,43 +430,20 @@ const normalizeImageConfig = (config) => {
   return aspectRatio ? { imageSize, aspectRatio } : { imageSize };
 };
 
-const buildGenerationConfig = (imageConfig) => {
-  const generationConfig = {
-    responseModalities: ["TEXT", "IMAGE"],
-    temperature: 1.0,
-  };
-
-  if (imageConfig) {
-    generationConfig.imageConfig = imageConfig;
-  }
-
-  return generationConfig;
-};
-
-const isImageConfigError = (error) => {
-  const message = (error?.message || "").toLowerCase();
-  return (
-    error?.status === 400 &&
-    (message.includes("imageconfig") ||
-      message.includes("image_config") ||
-      message.includes("imagesize") ||
-      message.includes("image_size") ||
-      message.includes("aspectratio") ||
-      message.includes("aspect ratio"))
-  );
-};
-
 const isTransientGenerationError = (error) => {
   const message = (error?.message || "").toLowerCase();
-  const code = (error?.code || "").toString().toUpperCase();
+  const code = (error?.code || "").toString().toLowerCase();
   const status = Number(error?.status);
   return (
     [429, 500, 502, 503, 504].includes(status) ||
-    code === "UNAVAILABLE" ||
-    code === "RESOURCE_EXHAUSTED" ||
-    message.includes("high demand") ||
-    message.includes("try again later") ||
-    message.includes("temporarily unavailable")
+    code === "rate_limit_exceeded" ||
+    code === "server_error" ||
+    code === "service_unavailable" ||
+    code === "insufficient_quota" ||
+    message.includes("rate limit") ||
+    message.includes("try again") ||
+    message.includes("temporarily unavailable") ||
+    message.includes("overloaded")
   );
 };
 
@@ -509,30 +455,30 @@ const buildNoImageResponse = (errors) => {
     };
   }
 
-  const hasHighDemand = errors.some((e) => {
+  const hasRateLimit = errors.some((e) => {
     const msg = (e?.message || "").toLowerCase();
-    return msg.includes("high demand") || msg.includes("try again later");
+    return msg.includes("rate limit") || Number(e?.status) === 429;
   });
   const hasTimeout = errors.some((e) => Number(e?.status) === 504);
 
-  if (hasHighDemand) {
+  if (hasRateLimit) {
     return {
       status: 503,
-      message: "Les serveurs de Google sont actuellement surchargés. Le modèle d'IA que nous utilisons (Google Gemini) subit un pic de demande. Réessaie dans quelques minutes.",
+      message: "Le service de génération (OpenAI) est actuellement surchargé. Réessaie dans quelques minutes.",
     };
   }
 
   if (hasTimeout) {
     return {
       status: 504,
-      message: "La génération a pris trop de temps. Les serveurs de Google (Gemini) sont probablement ralentis. Réessaie dans quelques instants.",
+      message: "La génération a pris trop de temps. Les serveurs OpenAI sont probablement ralentis. Réessaie dans quelques instants.",
     };
   }
 
   if (errors.some(isTransientGenerationError)) {
     return {
       status: 503,
-      message: "Les serveurs de Google (Gemini) sont temporairement indisponibles. Réessaie dans quelques instants.",
+      message: "Les serveurs OpenAI sont temporairement indisponibles. Réessaie dans quelques instants.",
     };
   }
 
@@ -554,39 +500,58 @@ const buildNoImageResponse = (errors) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// ---------- Circuit breaker for the primary model ----------
-const circuitBreaker = {
-  failures: [],          // timestamps of recent consecutive 503s
-  tripped: false,
-  trippedAt: 0,
-  THRESHOLD: 3,          // trip after N consecutive transient failures
-  WINDOW_MS: 60_000,     // within this time window
-  COOLDOWN_MS: 300_000,  // stay tripped for 5 minutes
-  record(failed) {
-    if (!failed) { this.failures = []; return; }
-    const now = Date.now();
-    this.failures.push(now);
-    this.failures = this.failures.filter((t) => now - t < this.WINDOW_MS);
-    if (this.failures.length >= this.THRESHOLD) {
-      this.tripped = true;
-      this.trippedAt = now;
-      console.log("[circuit-breaker] TRIPPED – skipping primary model for 5 min");
-    }
-  },
-  shouldSkipPrimary() {
-    if (!this.tripped) return false;
-    if (Date.now() - this.trippedAt > this.COOLDOWN_MS) {
-      this.tripped = false;
-      this.failures = [];
-      console.log("[circuit-breaker] RESET – trying primary model again");
-      return false;
-    }
-    return true;
-  },
+// Build the request to the OpenAI image API. Uses /images/edits when input
+// images are provided, /images/generations otherwise.
+const buildOpenAIRequest = ({ model, prompt, baseImage, inspirations, size, quality }) => {
+  const hasImages = Boolean(baseImage) || inspirations.length > 0;
+
+  if (!hasImages) {
+    return {
+      url: `${OPENAI_BASE_URL}/images/generations`,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        prompt,
+        size,
+        quality,
+        n: 1,
+      }),
+      isMultipart: false,
+    };
+  }
+
+  const form = new FormData();
+  form.append("model", model);
+  form.append("prompt", prompt);
+  form.append("size", size);
+  form.append("quality", quality);
+  form.append("n", "1");
+
+  const appendImage = (img, filename) => {
+    const buf = Buffer.from(img.data, "base64");
+    const blob = new Blob([buf], { type: img.mimeType || "image/png" });
+    // OpenAI accepts repeated `image` fields for multi-image input.
+    form.append("image", blob, filename);
+  };
+
+  if (baseImage) appendImage(baseImage, "source.png");
+  inspirations.forEach((img, i) => appendImage(img, `style_${i + 1}.png`));
+
+  return {
+    url: `${OPENAI_BASE_URL}/images/edits`,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: form,
+    isMultipart: true,
+  };
 };
 
-// Try a single model with retries + exponential backoff
-const callGeminiRawSingleModel = async ({ body, endpoint, maxRetries = 3, onProgress, label = "" }) => {
+// Call gpt-image-2 with retries + exponential backoff on transient errors.
+const callOpenAI = async ({ prompt, baseImage, inspirations, size, quality, maxRetries = 3, onProgress, label = "" }) => {
   const timeoutMs = process.env.VERCEL === "1" ? 55000 : 180000;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -594,23 +559,24 @@ const callGeminiRawSingleModel = async ({ body, endpoint, maxRetries = 3, onProg
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetch(endpoint, {
+      const { url, headers, body } = buildOpenAIRequest({
+        model: MODEL, prompt, baseImage, inspirations, size, quality,
+      });
+
+      const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify(body),
+        headers,
+        body,
         signal: controller.signal,
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         const apiError = buildApiError(data, response.status);
         if (attempt < maxRetries && isTransientGenerationError(apiError)) {
           const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 15000);
-          console.log(`[${label}] Gemini ${response.status} (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
+          console.log(`[${label}] OpenAI ${response.status} (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
           if (onProgress) onProgress({ event: "retry", attempt: attempt + 1, maxAttempts: maxRetries + 1, status: response.status, delayMs: Math.round(delay) });
           clearTimeout(timeoutId);
           await sleep(delay);
@@ -619,7 +585,10 @@ const callGeminiRawSingleModel = async ({ body, endpoint, maxRetries = 3, onProg
         throw apiError;
       }
 
-      return data;
+      return {
+        images: extractImages(data),
+        usage: data?.usage || null,
+      };
     } catch (error) {
       clearTimeout(timeoutId);
       if (error?.name === "AbortError") {
@@ -637,7 +606,7 @@ const callGeminiRawSingleModel = async ({ body, endpoint, maxRetries = 3, onProg
       };
       if (attempt < maxRetries && isTransientGenerationError(wrapped)) {
         const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 15000);
-        console.log(`[${label}] Gemini error (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
+        console.log(`[${label}] OpenAI error (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
         if (onProgress) onProgress({ event: "retry", attempt: attempt + 1, maxAttempts: maxRetries + 1, status: wrapped.status, delayMs: Math.round(delay) });
         await sleep(delay);
         continue;
@@ -647,77 +616,6 @@ const callGeminiRawSingleModel = async ({ body, endpoint, maxRetries = 3, onProg
       clearTimeout(timeoutId);
     }
   }
-};
-
-// Try primary model, then fallback model if primary fails with transient errors
-const callGeminiRaw = async ({ parts, generationConfig, systemInstruction, maxRetries = 3, onProgress, label = "" }) => {
-  const body = {
-    system_instruction: systemInstruction || SYSTEM_INSTRUCTION,
-    contents: [{ parts }],
-    generationConfig,
-  };
-
-  const skipPrimary = circuitBreaker.shouldSkipPrimary();
-  const models = skipPrimary
-    ? [FALLBACK_MODEL]
-    : [PRIMARY_MODEL, FALLBACK_MODEL];
-
-  if (skipPrimary) {
-    console.log(`[${label}] Circuit breaker active – going straight to ${FALLBACK_MODEL}`);
-  }
-
-  let lastError = null;
-  let usedModel = null;
-
-  for (const model of models) {
-    const endpoint = geminiEndpoint(model);
-    usedModel = model;
-
-    try {
-      const data = await callGeminiRawSingleModel({
-        body,
-        endpoint,
-        maxRetries,
-        onProgress,
-        label: `${label}:${model.includes("flash") ? "flash" : "pro"}`,
-      });
-      // Success – update circuit breaker & return
-      if (model === PRIMARY_MODEL) circuitBreaker.record(false);
-      data._usedModel = model;
-      data._usedFallback = model !== PRIMARY_MODEL;
-      return data;
-    } catch (error) {
-      lastError = error;
-      // Record failure for primary model
-      if (model === PRIMARY_MODEL) circuitBreaker.record(true);
-      // Only try next model if this was a transient error
-      if (!isTransientGenerationError(error)) throw error;
-      console.log(`[${label}] ${model} exhausted retries, trying fallback...`);
-      if (onProgress) onProgress({ event: "model-fallback", fromModel: model, toModel: FALLBACK_MODEL });
-    }
-  }
-
-  throw lastError;
-};
-
-const callGemini = async ({ parts, generationConfig, systemInstruction, onProgress, label }) => {
-  const data = await callGeminiRaw({ parts, generationConfig, systemInstruction, onProgress, label });
-  const meta = data?.usageMetadata || data?.usage_metadata || null;
-  return {
-    images: extractImages(data),
-    usage: meta
-      ? {
-          promptTokenCount:
-            meta.promptTokenCount ?? meta.prompt_token_count ?? null,
-          candidatesTokenCount:
-            meta.candidatesTokenCount ?? meta.candidates_token_count ?? null,
-          totalTokenCount:
-            meta.totalTokenCount ?? meta.total_token_count ?? null,
-        }
-      : null,
-    usedFallback: data._usedFallback || false,
-    usedModel: data._usedModel || PRIMARY_MODEL,
-  };
 };
 
 app.get("/api/config", (req, res) => {
@@ -895,7 +793,6 @@ app.delete(
         .json({ error: "Impossible de supprimer votre propre compte." });
     }
 
-    // Delete profile first (cascade will not apply from profiles to auth)
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .delete()
@@ -905,7 +802,6 @@ app.delete(
       return res.status(500).json({ error: "Suppression du profil impossible." });
     }
 
-    // Delete from Supabase Auth
     const { error: authError } =
       await supabaseAdmin.auth.admin.deleteUser(userId);
 
@@ -938,7 +834,6 @@ app.post(
     const defaultPassword = "Colombus138!";
     const results = { created: [], skipped: [], errors: [] };
 
-    // Get existing emails to check duplicates
     const { data: existingProfiles } = await supabaseAdmin
       .from("profiles")
       .select("email");
@@ -1177,7 +1072,6 @@ app.get(
     }
 
     try {
-      // Always fetch all profiles for the user filter dropdown
       const { data: allProfiles } = await supabaseAdmin
         .from("profiles")
         .select("id, email, daily_limit_override, is_active")
@@ -1189,7 +1083,6 @@ app.get(
         isActive: p.is_active,
       }));
 
-      // Build usage query with optional user filter
       let query = supabaseAdmin
         .from("api_usage")
         .select(
@@ -1236,13 +1129,11 @@ app.get(
         modeMap[rowMode].calls += 1;
       });
 
-      // Profile lookup for users in the data
       const profilesMap = {};
       (allProfiles || []).forEach((p) => {
         profilesMap[p.id] = p;
       });
 
-      // Get global daily limit
       const { data: limitRow } = await supabaseAdmin
         .from("usage_limits")
         .select("value")
@@ -1250,7 +1141,6 @@ app.get(
         .single();
       const globalDailyLimit = parseInt(limitRow?.value) || 20;
 
-      // Count today's successful generations per user
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
       const todayStr = todayStart.toISOString();
@@ -1296,10 +1186,8 @@ app.get(
         }))
         .sort((a, b) => b.cost - a.cost);
 
-      // Budget status (always monthly, always global)
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       let spentThisMonthUsd = 0;
-      // Need global monthly spend (not filtered by user)
       if (filterUserId) {
         const { data: monthRows } = await supabaseAdmin
           .from("api_usage")
@@ -1326,7 +1214,6 @@ app.get(
           ? Math.round((spentThisMonthUsd / monthlyBudgetUsd) * 10000) / 100
           : 0;
 
-      // Average cost per day (for the filtered period)
       const dayCount = Object.keys(dailyMap).length || 1;
       const avgCostPerDay = totalCost / dayCount;
 
@@ -1368,7 +1255,7 @@ app.post(
     if (!apiKey) {
       return res
         .status(500)
-        .json({ error: "GEMINI_API_KEY manquante dans l'environnement." });
+        .json({ error: "OPENAI_API_KEY manquante dans l'environnement." });
     }
 
     const {
@@ -1412,29 +1299,22 @@ app.post(
       const warnings = [];
 
       const normalizedImageConfig = normalizeImageConfig(imageConfig);
-      const generationConfig = buildGenerationConfig(normalizedImageConfig);
+      const imageSizeTier = normalizedImageConfig.imageSize;
+      const quality = QUALITY_FROM_SIZE[imageSizeTier] || "medium";
+      const size = openaiSizeFromAspectRatio(normalizedImageConfig.aspectRatio);
 
       const safeBaseImage =
         baseImage?.data && baseImage?.mimeType ? baseImage : null;
       const inputImageCount = (safeBaseImage ? 1 : 0) + inspirations.length;
-      const activeSystemInstruction = isCreateMode
-        ? CREATE_SYSTEM_INSTRUCTION
-        : SYSTEM_INSTRUCTION;
 
-      const STAGGER_DELAY_MS = 2000; // delay between sequential calls to let API recover
+      const STAGGER_DELAY_MS = 2000;
 
       const onProgress = (evt) => {
         try { res.write(JSON.stringify({ type: "progress", ...evt }) + "\n"); } catch (_) {}
       };
 
-      let usedFallbackModel = false;
-
-      const runBatch = async (count, config, offset, isFallback = false) => {
+      const runBatch = async (count, offset) => {
         const safeOffset = Number.isInteger(offset) ? offset : 0;
-        const batchImageSize =
-          config?.imageConfig?.imageSize ||
-          normalizedImageConfig?.imageSize ||
-          "1K";
         const batchImages = [];
         const batchErrors = [];
         let batchCostUsd = 0;
@@ -1446,41 +1326,43 @@ app.post(
           onProgress({ event: "variant", index: variantNum, total: safeCount });
           console.log(`[${reqId}] variant ${variantNum}/${safeCount} start`);
 
+          const variantPrompt = buildFinalPrompt({
+            baseImage: safeBaseImage,
+            inspirations,
+            prompt,
+            variantIndex: variantNum,
+            variantTotal: safeCount,
+            mode,
+          });
+
           try {
-            const result = await callGemini({
-              parts: buildParts({
-                baseImage: safeBaseImage,
-                inspirations,
-                prompt,
-                count: safeCount,
-                variantIndex: variantNum,
-                variantTotal: safeCount,
-                mode,
-              }),
-              generationConfig: config,
-              systemInstruction: activeSystemInstruction,
+            const result = await callOpenAI({
+              prompt: variantPrompt,
+              baseImage: safeBaseImage,
+              inspirations,
+              size,
+              quality,
               onProgress: (evt) => onProgress({ ...evt, variantIndex: variantNum, variantTotal: safeCount }),
-              label: `${reqId}:v${variantNum}${isFallback ? ":fb" : ""}`,
+              label: `${reqId}:v${variantNum}`,
             });
             const imgs = result.images;
-            if (result.usedFallback) usedFallbackModel = true;
-            console.log(`[${reqId}] variant ${variantNum}/${safeCount} ok (${result.usedModel}), ${imgs.length} image(s)`);
+            console.log(`[${reqId}] variant ${variantNum}/${safeCount} ok, ${imgs.length} image(s)`);
             batchImages.push(...imgs);
             const cost = calculateCostUsd({
-              promptTokenCount: result.usage?.promptTokenCount,
-              candidatesTokenCount: result.usage?.candidatesTokenCount,
               outputImageCount: imgs.length,
-              imageSize: batchImageSize,
+              quality,
+              size,
             });
             if (cost) batchCostUsd += cost;
             logApiUsage({
               userId: req.user.id,
               mode,
-              imageSize: batchImageSize,
+              imageSize: imageSizeTier,
+              quality,
+              size,
               inputImageCount,
               outputImageCount: imgs.length,
               usage: result.usage,
-              isFallback: isFallback || result.usedFallback,
               success: true,
             });
           } catch (err) {
@@ -1489,11 +1371,12 @@ app.post(
             logApiUsage({
               userId: req.user.id,
               mode,
-              imageSize: batchImageSize,
+              imageSize: imageSizeTier,
+              quality,
+              size,
               inputImageCount,
               outputImageCount: 0,
               usage: null,
-              isFallback,
               success: false,
             });
           }
@@ -1504,44 +1387,16 @@ app.post(
 
       let images = [];
       let generationCostUsd = 0;
-      let batch = await runBatch(safeCount, generationConfig, 0);
+      const batch = await runBatch(safeCount, 0);
       images = images.concat(batch.batchImages);
       errors.push(...batch.batchErrors);
       generationCostUsd += batch.batchCostUsd || 0;
 
-      let missingAfterPrimary = safeCount - images.length;
-
-      // Fallback 1: imageConfig error → retry without imageConfig
-      if (
-        missingAfterPrimary > 0 &&
-        batch.batchErrors.some(isImageConfigError)
-      ) {
-        warnings.push("imageConfig refusee, fallback en 1K sans aspect ratio.");
-        const fallbackConfig = buildGenerationConfig({ imageSize: "1K" });
-        const offset = safeCount - missingAfterPrimary;
-        batch = await runBatch(
-          missingAfterPrimary,
-          fallbackConfig,
-          offset,
-          true,
-        );
-        images = images.concat(batch.batchImages);
-        errors.push(...batch.batchErrors);
-        generationCostUsd += batch.batchCostUsd || 0;
-        missingAfterPrimary = safeCount - images.length;
-      }
-
-
       images = images.slice(0, safeCount);
-
-      if (usedFallbackModel && images.length > 0) {
-        warnings.push("Modèle principal indisponible — image générée avec le modèle de secours (qualité équivalente, modèle plus rapide).");
-      }
 
       if (images.length === 0) {
         console.log(`[${reqId}] done: 0 images, ${errors.length} errors`);
         const noImageResponse = buildNoImageResponse(errors);
-        // Don't expose raw Google API errors to the user for transient issues
         const userErrors = errors.every(isTransientGenerationError) ? [] : errors;
         res.write(JSON.stringify({ type: "result", ok: false, status: noImageResponse.status, error: noImageResponse.message, errors: userErrors }) + "\n");
         return res.end();
@@ -1551,7 +1406,7 @@ app.post(
         const hasTransient = errors.some(isTransientGenerationError);
         if (hasTransient) {
           warnings.push(
-            `${images.length} image(s) sur ${safeCount} générée(s). Les serveurs de Google (Gemini) sont ralentis, réessaie pour les images manquantes.`,
+            `${images.length} image(s) sur ${safeCount} générée(s). Les serveurs OpenAI sont ralentis, réessaie pour les images manquantes.`,
           );
         } else {
           warnings.push(
@@ -1564,7 +1419,6 @@ app.post(
         Math.round(generationCostUsd * USD_TO_EUR * 100) / 100;
 
       console.log(`[${reqId}] done: ${images.length} images, ${errors.length} errors, ${generationCostEur}€`);
-      // Don't expose raw API errors to the user — warnings already contain user-friendly messages
       const userErrors = errors.filter((e) => !isTransientGenerationError(e));
       res.write(JSON.stringify({
         type: "result",
