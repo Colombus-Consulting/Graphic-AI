@@ -586,6 +586,8 @@ const buildOpenAIRequest = ({ model, prompt, baseImage, inspirations, size, qual
 };
 
 // Parse OpenAI's SSE stream and invoke onEvent for each decoded JSON payload.
+// onEvent errors propagate (so an "error" event can abort the call); only
+// malformed JSON lines are silently skipped.
 const parseSSEStream = async (body, onEvent) => {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -602,11 +604,13 @@ const parseSSEStream = async (body, onEvent) => {
         if (!line.startsWith("data: ")) continue;
         const payload = line.slice(6);
         if (payload === "[DONE]") return;
+        let parsed;
         try {
-          onEvent(JSON.parse(payload));
+          parsed = JSON.parse(payload);
         } catch (_) {
-          // ignore malformed lines
+          continue;
         }
+        onEvent(parsed);
       }
     }
   }
@@ -655,7 +659,11 @@ const callOpenAI = async ({ prompt, baseImage, inspirations, size, quality, maxR
       let finalUsage = null;
 
       await parseSSEStream(response.body, (event) => {
-        if (event?.type === "image_generation.partial_image" && event.b64_json) {
+        const type = event?.type || "";
+        // OpenAI uses different namespaces per endpoint:
+        //   /v1/images/generations -> image_generation.partial_image / .completed
+        //   /v1/images/edits       -> image_edit.partial_image / .completed
+        if (type.endsWith(".partial_image") && event.b64_json) {
           if (onProgress) {
             onProgress({
               event: "partial-image",
@@ -664,9 +672,15 @@ const callOpenAI = async ({ prompt, baseImage, inspirations, size, quality, maxR
               mimeType: "image/png",
             });
           }
-        } else if (event?.type === "image_generation.completed" && event.b64_json) {
+        } else if (type.endsWith(".completed") && event.b64_json) {
           finalB64 = event.b64_json;
           finalUsage = event.usage || null;
+        } else if (type === "error") {
+          throw {
+            message: event.error?.message || "OpenAI a renvoyé une erreur dans le stream.",
+            status: 502,
+            code: event.error?.code,
+          };
         }
       });
 
@@ -1374,7 +1388,7 @@ app.post(
         .json({ error: "Le prompt est obligatoire en mode Créer." });
     }
 
-    const safeCount = clamp(Number.parseInt(numImages, 10) || 1, 1, 4);
+    const safeCount = clamp(Number.parseInt(numImages, 10) || 1, 1, 3);
     const inspirations = Array.isArray(inspirationImages)
       ? inspirationImages
           .filter((image) => image?.data && image?.mimeType)
@@ -1399,21 +1413,16 @@ app.post(
         baseImage?.data && baseImage?.mimeType ? baseImage : null;
       const inputImageCount = (safeBaseImage ? 1 : 0) + inspirations.length;
 
-      const STAGGER_DELAY_MS = 2000;
-
       const onProgress = (evt) => {
         try { res.write(JSON.stringify({ type: "progress", ...evt }) + "\n"); } catch (_) {}
       };
 
+      // Run every variant in parallel (Promise.all). Each call streams its own
+      // partials so the frontend updates each card independently.
       const runBatch = async (count, offset) => {
         const safeOffset = Number.isInteger(offset) ? offset : 0;
-        const batchImages = [];
-        const batchErrors = [];
-        let batchCostUsd = 0;
 
-        for (let index = 0; index < count; index++) {
-          if (index > 0) await sleep(STAGGER_DELAY_MS);
-
+        const runVariant = async (index) => {
           const variantNum = safeOffset + index + 1;
           onProgress({ event: "variant", index: variantNum, total: safeCount });
           console.log(`[${reqId}] variant ${variantNum}/${safeCount} start`);
@@ -1439,13 +1448,11 @@ app.post(
             });
             const imgs = result.images;
             console.log(`[${reqId}] variant ${variantNum}/${safeCount} ok, ${imgs.length} image(s)`);
-            batchImages.push(...imgs);
             const cost = calculateCostUsd({
               outputImageCount: imgs.length,
               quality,
               size,
             });
-            if (cost) batchCostUsd += cost;
             logApiUsage({
               userId: req.user.id,
               mode,
@@ -1457,9 +1464,9 @@ app.post(
               usage: result.usage,
               success: true,
             });
+            return { ok: true, images: imgs, cost };
           } catch (err) {
             console.log(`[${reqId}] variant ${variantNum}/${safeCount} error: ${err?.status} ${err?.message}`);
-            batchErrors.push(err);
             logApiUsage({
               userId: req.user.id,
               mode,
@@ -1471,9 +1478,25 @@ app.post(
               usage: null,
               success: false,
             });
+            return { ok: false, err };
+          }
+        };
+
+        const results = await Promise.all(
+          Array.from({ length: count }, (_, i) => runVariant(i)),
+        );
+
+        const batchImages = [];
+        const batchErrors = [];
+        let batchCostUsd = 0;
+        for (const r of results) {
+          if (r.ok) {
+            batchImages.push(...r.images);
+            if (r.cost) batchCostUsd += r.cost;
+          } else {
+            batchErrors.push(r.err);
           }
         }
-
         return { batchImages, batchErrors, batchCostUsd };
       };
 
