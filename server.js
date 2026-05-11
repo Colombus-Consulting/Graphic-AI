@@ -526,11 +526,8 @@ const buildNoImageResponse = (errors) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const PARTIAL_IMAGES = 2;
-
 // Build the request to the OpenAI image API. Uses /images/edits when input
-// images are provided, /images/generations otherwise. Always streams with
-// 2 partial previews for progressive frontend rendering.
+// images are provided, /images/generations otherwise.
 const buildOpenAIRequest = ({ model, prompt, baseImage, inspirations, size, quality }) => {
   const hasImages = Boolean(baseImage) || inspirations.length > 0;
 
@@ -540,7 +537,6 @@ const buildOpenAIRequest = ({ model, prompt, baseImage, inspirations, size, qual
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
-        Accept: "text/event-stream",
       },
       body: JSON.stringify({
         model,
@@ -548,8 +544,6 @@ const buildOpenAIRequest = ({ model, prompt, baseImage, inspirations, size, qual
         size,
         quality,
         n: 1,
-        stream: true,
-        partial_images: PARTIAL_IMAGES,
       }),
       isMultipart: false,
     };
@@ -561,8 +555,6 @@ const buildOpenAIRequest = ({ model, prompt, baseImage, inspirations, size, qual
   form.append("size", size);
   form.append("quality", quality);
   form.append("n", "1");
-  form.append("stream", "true");
-  form.append("partial_images", String(PARTIAL_IMAGES));
 
   const appendImage = (img, filename) => {
     const buf = Buffer.from(img.data, "base64");
@@ -578,46 +570,24 @@ const buildOpenAIRequest = ({ model, prompt, baseImage, inspirations, size, qual
     url: `${OPENAI_BASE_URL}/images/edits`,
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      Accept: "text/event-stream",
     },
     body: form,
     isMultipart: true,
   };
 };
 
-// Parse OpenAI's SSE stream and invoke onEvent for each decoded JSON payload.
-// onEvent errors propagate (so an "error" event can abort the call); only
-// malformed JSON lines are silently skipped.
-const parseSSEStream = async (body, onEvent) => {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buffer.indexOf("\n\n")) !== -1) {
-      const chunk = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 2);
-      for (const line of chunk.split("\n")) {
-        if (!line.startsWith("data: ")) continue;
-        const payload = line.slice(6);
-        if (payload === "[DONE]") return;
-        let parsed;
-        try {
-          parsed = JSON.parse(payload);
-        } catch (_) {
-          continue;
-        }
-        onEvent(parsed);
-      }
+const extractImages = (data) => {
+  const items = Array.isArray(data?.data) ? data.data : [];
+  const images = [];
+  items.forEach((item) => {
+    if (item?.b64_json) {
+      images.push({ mimeType: "image/png", data: item.b64_json });
     }
-  }
+  });
+  return images;
 };
 
 // Call gpt-image-2 with retries + exponential backoff on transient errors.
-// Streams the response and emits partial images via onProgress.
 const callOpenAI = async ({ prompt, baseImage, inspirations, size, quality, maxRetries = 3, onProgress, label = "" }) => {
   // High-quality redesign can take 200s+ on hard prompts; allow 5 min on long-lived
   // hosts (Railway). Vercel functions cap around 60s, so stay under that there.
@@ -640,10 +610,10 @@ const callOpenAI = async ({ prompt, baseImage, inspirations, size, quality, maxR
         signal: controller.signal,
       });
 
+      const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        // Error responses are JSON, not SSE.
-        const errData = await response.json().catch(() => ({}));
-        const apiError = buildApiError(errData, response.status);
+        const apiError = buildApiError(data, response.status);
         if (attempt < maxRetries && isTransientGenerationError(apiError)) {
           const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 15000);
           console.log(`[${label}] OpenAI ${response.status} (attempt ${attempt + 1}/${maxRetries + 1}), retry in ${Math.round(delay)}ms...`);
@@ -655,45 +625,9 @@ const callOpenAI = async ({ prompt, baseImage, inspirations, size, quality, maxR
         throw apiError;
       }
 
-      let finalB64 = null;
-      let finalUsage = null;
-
-      await parseSSEStream(response.body, (event) => {
-        const type = event?.type || "";
-        // OpenAI uses different namespaces per endpoint:
-        //   /v1/images/generations -> image_generation.partial_image / .completed
-        //   /v1/images/edits       -> image_edit.partial_image / .completed
-        if (type.endsWith(".partial_image") && event.b64_json) {
-          if (onProgress) {
-            onProgress({
-              event: "partial-image",
-              partialIndex: event.partial_image_index ?? 0,
-              data: event.b64_json,
-              mimeType: "image/png",
-            });
-          }
-        } else if (type.endsWith(".completed") && event.b64_json) {
-          finalB64 = event.b64_json;
-          finalUsage = event.usage || null;
-        } else if (type === "error") {
-          throw {
-            message: event.error?.message || "OpenAI a renvoyé une erreur dans le stream.",
-            status: 502,
-            code: event.error?.code,
-          };
-        }
-      });
-
-      if (!finalB64) {
-        throw {
-          message: "Aucune image finale dans le flux OpenAI.",
-          status: 502,
-        };
-      }
-
       return {
-        images: [{ mimeType: "image/png", data: finalB64 }],
-        usage: finalUsage,
+        images: extractImages(data),
+        usage: data?.usage || null,
       };
     } catch (error) {
       clearTimeout(timeoutId);
