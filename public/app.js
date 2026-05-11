@@ -1288,6 +1288,23 @@ const clearLoading = (placeholders = []) => {
   resultsGrid.classList.remove("loading-grid");
 };
 
+// Inject (or refresh) a partial preview image inside a loading card.
+const updatePartialImage = (cards, variantIndex, b64, mimeType) => {
+  const card = cards?.[variantIndex - 1];
+  if (!card || !b64) return;
+  const dataUrl = `data:${mimeType || "image/png"};base64,${b64}`;
+  let img = card.querySelector("img.partial-preview");
+  if (!img) {
+    const placeholder = card.querySelector(".placeholder");
+    if (placeholder) placeholder.remove();
+    img = document.createElement("img");
+    img.className = "partial-preview";
+    img.alt = "Aperçu en cours";
+    card.appendChild(img);
+  }
+  img.src = dataUrl;
+};
+
 const getResultDataUrl = (image) => getImageSrc(image);
 
 const openPreview = (src) => {
@@ -1424,6 +1441,10 @@ const generateImages = async () => {
     }
 
     const data = await readGenerateStream(response, (event) => {
+      if (event.event === "partial-image") {
+        updatePartialImage(loadingCards, event.variantIndex, event.data, event.mimeType);
+        return;
+      }
       setStatus(formatProgressMessage(event), "");
     });
 
@@ -1547,6 +1568,10 @@ const generateRefine = async () => {
     }
 
     const data = await readGenerateStream(response, (event) => {
+      if (event.event === "partial-image") {
+        updatePartialImage(loadingCards, event.variantIndex, event.data, event.mimeType);
+        return;
+      }
       setStatus(formatProgressMessage(event), "");
     });
 
@@ -1696,6 +1721,10 @@ const generateCreate = async () => {
     }
 
     const data = await readGenerateStream(response, (event) => {
+      if (event.event === "partial-image") {
+        updatePartialImage(loadingCards, event.variantIndex, event.data, event.mimeType);
+        return;
+      }
       setCreateStatus(formatProgressMessage(event), "");
     });
 
