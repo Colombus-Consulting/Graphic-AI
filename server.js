@@ -47,8 +47,10 @@ const VALID_ASPECT_RATIOS = new Set([
 ]);
 const VALID_IMAGE_SIZES = new Set(["1K", "2K", "4K"]);
 
-// Frontend imageSize tier → OpenAI quality
-const QUALITY_FROM_SIZE = { "1K": "low", "2K": "medium", "4K": "high" };
+// Quality is decided server-side based on the generation mode.
+// Redesign/refine = high stakes (data fidelity matters) → high.
+// Create = exploratory ideation → medium.
+const QUALITY_BY_MODE = { create: "medium", refine: "high", base: "high" };
 
 // Map a "W:H" aspect ratio + tier to an OpenAI size.
 // 16:9 landscape ratios get the real 2K (1920x1080) / 4K (3840x2160) presets;
@@ -613,7 +615,10 @@ const parseSSEStream = async (body, onEvent) => {
 // Call gpt-image-2 with retries + exponential backoff on transient errors.
 // Streams the response and emits partial images via onProgress.
 const callOpenAI = async ({ prompt, baseImage, inspirations, size, quality, maxRetries = 3, onProgress, label = "" }) => {
-  const timeoutMs = process.env.VERCEL === "1" ? 55000 : 180000;
+  // High-quality redesign can take 200s+ on hard prompts; allow 5 min on long-lived
+  // hosts (Railway). Vercel functions cap around 60s, so stay under that there.
+  const defaultTimeout = process.env.VERCEL === "1" ? 55000 : 300000;
+  const timeoutMs = Number(process.env.OPENAI_TIMEOUT_MS) || defaultTimeout;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController();
@@ -1387,7 +1392,7 @@ app.post(
 
       const normalizedImageConfig = normalizeImageConfig(imageConfig);
       const imageSizeTier = normalizedImageConfig.imageSize;
-      const quality = QUALITY_FROM_SIZE[imageSizeTier] || "medium";
+      const quality = QUALITY_BY_MODE[mode] || "high";
       const size = openaiSizeFromAspectRatioAndTier(normalizedImageConfig.aspectRatio, imageSizeTier);
 
       const safeBaseImage =
