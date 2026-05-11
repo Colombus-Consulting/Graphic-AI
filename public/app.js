@@ -81,7 +81,6 @@ const appViews = Array.from(document.querySelectorAll(".app-view"));
 const deleteProjectModal = null;
 const deleteProjectNameEl = null;
 const confirmDeleteProjectBtn = null;
-const downloadModal = document.querySelector("#downloadModal");
 const passwordModal = document.querySelector("#passwordModal");
 const passwordForm = document.querySelector("#passwordForm");
 const newPasswordInput = document.querySelector("#newPassword");
@@ -622,19 +621,6 @@ const getImageSrc = (image) => {
   return "";
 };
 
-// Download modal functions
-const openDownloadModal = () => {
-  if (!downloadModal) return;
-  downloadModal.classList.add("is-open");
-  downloadModal.setAttribute("aria-hidden", "false");
-};
-
-const closeDownloadModal = () => {
-  if (!downloadModal) return;
-  downloadModal.classList.remove("is-open");
-  downloadModal.setAttribute("aria-hidden", "true");
-};
-
 // Password modal functions
 const openPasswordModal = () => {
   if (!passwordModal) return;
@@ -718,76 +704,18 @@ const parseExcelEmails = (file) => {
   });
 };
 
-// Generate high quality version and download
-const downloadHighQuality = async (image) => {
-  if (!currentSession) return;
-
-  const imageData = image;
-
-  if (!imageData.data) {
+const downloadImage = (image) => {
+  if (!image?.data) {
     setStatus("Données image manquantes.", "error");
     return;
   }
-
-  openDownloadModal();
-
-  try {
-    const response = await authorizedFetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        baseImage: {
-          data: imageData.data,
-          mimeType: imageData.mimeType || "image/png",
-        },
-        inspirationImages: [],
-        prompt:
-          "Reproduis cette image exactement à l'identique, sans aucune modification. Qualité maximale pour impression.",
-        numImages: 1,
-        imageConfig: {
-          imageSize: "4K",
-          aspectRatio: imageData.aspectRatio || undefined,
-        },
-        mode: "refine",
-      }),
-    });
-
-    if (response.status !== 200) {
-      closeDownloadModal();
-      setStatus("Erreur lors de la génération haute qualité.", "error");
-      return;
-    }
-
-    const data = await readGenerateStream(response, (event) => {
-      setStatus(formatProgressMessage(event), "");
-    });
-    closeDownloadModal();
-
-    if (!data || !data.ok || !data.images || data.images.length === 0) {
-      setStatus("Erreur lors de la génération haute qualité.", "error");
-      return;
-    }
-
-    if (data.estimatedCostEur) {
-      updateMonthlyCostDisplay(currentMonthlyCostEur + data.estimatedCostEur);
-    }
-
-    // Download the generated image
-    const hqImage = data.images[0];
-    const dataUrl = `data:${hqImage.mimeType || "image/png"};base64,${hqImage.data}`;
-
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = `graphique-4K-${Date.now()}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setStatus("Image haute qualité téléchargée.", "ok");
-  } catch (error) {
-    closeDownloadModal();
-    setStatus("Erreur lors du téléchargement.", "error");
-  }
+  const dataUrl = `data:${image.mimeType || "image/png"};base64,${image.data}`;
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = `graphique-${Date.now()}.png`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 
 const createResultCard = (image, index) => {
@@ -818,7 +746,7 @@ const createResultCard = (image, index) => {
   downloadBtn.type = "button";
   downloadBtn.className = "btn btn-outline btn-sm";
   downloadBtn.textContent = "Télécharger";
-  downloadBtn.addEventListener("click", () => downloadHighQuality(image));
+  downloadBtn.addEventListener("click", () => downloadImage(image));
 
   actionGroup.appendChild(refineBtn);
   actionGroup.appendChild(downloadBtn);
@@ -1463,7 +1391,7 @@ const generateImages = async () => {
         prompt: promptField.value,
         numImages: selectedCount,
         imageConfig: {
-          imageSize: "1K",
+          imageSize: "2K",
           aspectRatio: baseImage?.aspectRatio || undefined,
         },
         mode: "base",
@@ -1586,7 +1514,7 @@ const generateRefine = async () => {
         prompt,
         numImages: 1,
         imageConfig: {
-          imageSize: "1K",
+          imageSize: "2K",
           aspectRatio: selectedResult.aspectRatio || undefined,
         },
         mode: "refine",
@@ -1719,7 +1647,7 @@ const generateCreate = async () => {
       prompt: promptText,
       numImages: selectedCount,
       imageConfig: {
-        imageSize: "1K",
+        imageSize: "2K",
       },
       mode: "create",
     };

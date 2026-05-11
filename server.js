@@ -50,17 +50,28 @@ const VALID_IMAGE_SIZES = new Set(["1K", "2K", "4K"]);
 // Frontend imageSize tier → OpenAI quality
 const QUALITY_FROM_SIZE = { "1K": "low", "2K": "medium", "4K": "high" };
 
-// Map a "W:H" aspect ratio to one of the three sizes supported by gpt-image-2.
-const openaiSizeFromAspectRatio = (aspectRatio) => {
+// Map a "W:H" aspect ratio + tier to an OpenAI size.
+// 16:9 landscape ratios get the real 2K (1920x1080) / 4K (3840x2160) presets;
+// every other ratio stays on the 1024x* presets (no native 2K/4K square or portrait).
+const openaiSizeFromAspectRatioAndTier = (aspectRatio, tier) => {
   if (!aspectRatio) return "auto";
   const parts = String(aspectRatio).split(":");
   const w = Number(parts[0]);
   const h = Number(parts[1]);
   if (!w || !h) return "auto";
   const r = w / h;
-  if (r > 1.15) return "1536x1024";
-  if (r < 0.87) return "1024x1536";
-  return "1024x1024";
+
+  // 16:9 landscape window (covers 1.78). Excludes 3:2 (1.5) and 21:9 (2.33).
+  const is16x9Landscape = r >= 1.55 && r <= 1.85;
+  if (is16x9Landscape) {
+    if (tier === "4K") return "3840x2160";
+    if (tier === "2K") return "1920x1080";
+    return "1920x1080"; // 1K low at 1920x1080 = same price as 1024x768 low ($0.005)
+  }
+
+  if (r > 1.15) return "1536x1024"; // other landscape (3:2, 4:3, 21:9, etc.)
+  if (r < 0.87) return "1024x1536"; // portrait (9:16, 3:4, 2:3, etc.)
+  return "1024x1024"; // square (1:1, 4:5, 5:4)
 };
 
 const SYSTEM_INSTRUCTION_TEXT = [
@@ -350,11 +361,35 @@ const buildApiError = (data, status) => {
 const USD_TO_EUR = 0.84;
 const MONTHLY_BASE_EUR = 18;
 
-// gpt-image-2 per-image USD pricing
+// gpt-image-2 per-image USD pricing (OpenAI calculator estimates)
 const PRICING_TABLE = {
-  low: { "1024x1024": 0.006, "1024x1536": 0.005, "1536x1024": 0.005 },
-  medium: { "1024x1024": 0.053, "1024x1536": 0.041, "1536x1024": 0.041 },
-  high: { "1024x1024": 0.211, "1024x1536": 0.165, "1536x1024": 0.165 },
+  low: {
+    "1024x768": 0.005,
+    "1024x1024": 0.006,
+    "1024x1536": 0.005,
+    "1536x1024": 0.005,
+    "1920x1080": 0.005,
+    "2560x1440": 0.007,
+    "3840x2160": 0.012,
+  },
+  medium: {
+    "1024x768": 0.037,
+    "1024x1024": 0.053,
+    "1024x1536": 0.042,
+    "1536x1024": 0.042,
+    "1920x1080": 0.040,
+    "2560x1440": 0.056,
+    "3840x2160": 0.101,
+  },
+  high: {
+    "1024x768": 0.145,
+    "1024x1024": 0.211,
+    "1024x1536": 0.165,
+    "1536x1024": 0.165,
+    "1920x1080": 0.158,
+    "2560x1440": 0.222,
+    "3840x2160": 0.401,
+  },
 };
 
 const pricePerImage = (quality, size) => {
@@ -1301,7 +1336,7 @@ app.post(
       const normalizedImageConfig = normalizeImageConfig(imageConfig);
       const imageSizeTier = normalizedImageConfig.imageSize;
       const quality = QUALITY_FROM_SIZE[imageSizeTier] || "medium";
-      const size = openaiSizeFromAspectRatio(normalizedImageConfig.aspectRatio);
+      const size = openaiSizeFromAspectRatioAndTier(normalizedImageConfig.aspectRatio, imageSizeTier);
 
       const safeBaseImage =
         baseImage?.data && baseImage?.mimeType ? baseImage : null;
